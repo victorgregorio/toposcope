@@ -7,6 +7,21 @@ Python 3.9+ and pip are required.
 
 Optional (for richer scans): `lspci`, `lsusb`, `lscpu`.
 
+Install Python and pip:
+- Ubuntu/Debian:
+  ```bash
+  sudo apt update && sudo apt install -y python3 python3-pip
+  ```
+- CentOS / RHEL / Fedora:
+  ```bash
+  sudo dnf install -y python3 python3-pip
+  # or on older systems: sudo yum install -y python3 python3-pip
+  ```
+- openSUSE / SLE:
+  ```bash
+  sudo zypper refresh && sudo zypper install -y python3 python3-pip
+  ```
+
 Install system tools (optional but recommended):
 - Ubuntu/Debian:
   ```bash
