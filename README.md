@@ -28,6 +28,31 @@ toposcope serve --graph graph.json --port 8080
 
 Then visit `http://127.0.0.1:8080/index.html`.
 
+### Install requirements (Linux)
+TopoScope runs with Python only, but richer scans use common system tools. Install these packages on your distro:
+
+- Ubuntu/Debian:
+  ```bash
+  sudo apt update && sudo apt install -y pciutils usbutils util-linux
+  ```
+
+- CentOS / RHEL / Fedora:
+  ```bash
+  # Fedora / RHEL 8+ / CentOS Stream
+  sudo dnf install -y pciutils usbutils util-linux
+  # (Older CentOS/RHEL)
+  # sudo yum install -y pciutils usbutils util-linux
+  ```
+
+- openSUSE / SUSE Linux Enterprise:
+  ```bash
+  sudo zypper refresh && sudo zypper install -y pciutils usbutils util-linux
+  ```
+
+Notes:
+- These provide `lspci`, `lsusb`, and `lscpu`. If any are missing, TopoScope will still run but with less detail.
+- No root is required for basic listing; some environments may need `sudo` for full device info.
+
 ### Linux scanning
 On a Linux host, run:
 
