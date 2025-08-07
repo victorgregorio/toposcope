@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TopoScope Viewer</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <style>
+      html, body, #cy { height: 100%; margin: 0; padding: 0; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+      #toolbar { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 10; display: flex; gap: 8px; align-items: center; background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+      #legend { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+      .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; color: #222; }
+      .k-system { background: #ffe0b2; }
+      .k-cpu { background: #c8e6c9; }
+      .k-bus { background: #bbdefb; }
+      .k-pci-device { background: #d1c4e9; }
+      .k-usb-device { background: #ffcdd2; }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <strong>TopoScope</strong>
+      <button id="fit">Fit</button>
+      <button id="layout">Layout</button>
+      <div id="legend">
+        <span class="pill k-system">System</span>
+        <span class="pill k-cpu">CPU</span>
+        <span class="pill k-bus">Bus</span>
+        <span class="pill k-pci-device">PCI</span>
+        <span class="pill k-usb-device">USB</span>
+      </div>
+    </div>
+    <div id="cy"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.umd.min.js"></script>
+    <script>
+      async function loadGraph() {
+        const res = await fetch('graph.json');
+        if (!res.ok) {
+          const pre = document.createElement('pre');
+          pre.textContent = 'graph.json not found. Place your graph JSON next to index.html.';
+          document.body.appendChild(pre);
+          throw new Error('graph.json not found');
+        }
+        return await res.json();
+      }
+
+      function graphToElements(graph) {
+        const elements = [];
+        for (const n of graph.nodes) {
+          elements.push({ data: { id: n.id, label: n.label, kind: n.kind, properties: n.properties || {} } });
+        }
+        for (const e of graph.edges) {
+          elements.push({ data: { id: e.id, source: e.source, target: e.target, label: e.label || '', kind: e.kind || '' } });
+        }
+        return elements;
+      }
+
+      function kindColor(kind) {
+        switch (kind) {
+          case 'system': return '#fb8c00';
+          case 'cpu': return '#43a047';
+          case 'bus': return '#1e88e5';
+          case 'pci-device': return '#5e35b1';
+          case 'usb-device': return '#e53935';
+          default: return '#546e7a';
+        }
+      }
+
+      loadGraph().then(graph => {
+        const cy = cytoscape({
+          container: document.getElementById('cy'),
+          elements: graphToElements(graph),
+          style: [
+            { selector: 'node', style: { 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'color': '#fff', 'font-size': 10, 'background-color': ele => kindColor(ele.data('kind')), 'width': 'label', 'height': 'label', 'padding': '8px', 'shape': 'round-rectangle' }},
+            { selector: 'edge', style: { 'width': 2, 'line-color': '#90a4ae', 'target-arrow-color': '#90a4ae', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 8, 'text-background-opacity': 0.7, 'text-background-color': '#fff', 'text-background-padding': 2 }},
+          ],
+          layout: { name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }
+        });
+
+        document.getElementById('fit').onclick = () => cy.fit();
+        document.getElementById('layout').onclick = () => cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
+
+        cy.on('tap', 'node', (evt) => {
+          const n = evt.target;
+          const props = n.data('properties') || {};
+          const details = Object.entries(props).map(([k,v]) => `${k}: ${v}`).join('\n');
+          if (details) alert(`${n.data('label')}\n\n${details}`); else alert(n.data('label'));
+        });
+      });
+    </script>
+  </body>
+  </html>
