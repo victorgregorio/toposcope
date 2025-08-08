@@ -23,6 +23,8 @@
       <strong>TopoScope</strong>
       <button id="fit">Fit</button>
       <button id="layout">Layout</button>
+      <button id="save">Save</button>
+      <button id="reset">Reset</button>
       <div id="legend">
         <span class="pill k-system">System</span>
         <span class="pill k-cpu">CPU</span>
@@ -95,6 +97,44 @@
         }
       }
 
+      // Tiny FNV-1a hash for a stable graph identifier
+      function fnv1a(str) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = (h >>> 0) * 0x01000193;
+          h >>>= 0;
+        }
+        return (h >>> 0).toString(16);
+      }
+
+      function hashGraph(graph) {
+        const ids = {
+          n: (graph.nodes || []).map(n => n.id).sort(),
+          e: (graph.edges || []).map(e => `${e.source}->${e.target}`).sort(),
+        };
+        return fnv1a(JSON.stringify(ids));
+      }
+
+      function collectPositions(cy) {
+        const positions = {};
+        cy.nodes().forEach(n => { positions[n.id()] = n.position(); });
+        return positions;
+      }
+
+      function applySavedView(cy, saved) {
+        if (!saved || !saved.positions) return false;
+        const positions = saved.positions;
+        cy.layout({
+          name: 'preset',
+          positions: (n) => positions[n.id()] || n.position(),
+          fit: false
+        }).run();
+        if (saved.zoom) cy.zoom(saved.zoom);
+        if (saved.pan) cy.pan(saved.pan);
+        return true;
+      }
+
       loadGraph().then(graph => {
         const cy = cytoscape({
           container: document.getElementById('cy'),
@@ -127,8 +167,34 @@
           layout: { name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }
         });
 
+        const storageKey = `toposcope:view:v1:${hashGraph(graph)}`;
+
+        // Try to restore saved view
+        const restored = applySavedView(cy, JSON.parse(localStorage.getItem(storageKey) || 'null'));
+        if (!restored) {
+          cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
+        }
+
+        function saveView() {
+          const payload = {
+            positions: collectPositions(cy),
+            zoom: cy.zoom(),
+            pan: cy.pan(),
+          };
+          localStorage.setItem(storageKey, JSON.stringify(payload));
+        }
+
+        let saveTimer; const debouncedSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveView, 250); };
+        cy.on('dragfree position', 'node', debouncedSave);
+        cy.on('zoom pan', debouncedSave);
+
         document.getElementById('fit').onclick = () => cy.fit();
         document.getElementById('layout').onclick = () => cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
+        document.getElementById('save').onclick = () => saveView();
+        document.getElementById('reset').onclick = () => {
+          localStorage.removeItem(storageKey);
+          cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
+        };
       });
     </script>
   </body>
