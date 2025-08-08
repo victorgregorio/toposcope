@@ -5,7 +5,10 @@ Visual topology mapper for Linux hardware.
 ### Installation
 Python 3.9+ and pip are required. Use a virtual environment (PEP 668 safe):
 
-Distro quick setup:
+
+#### Linux Requirements 
+
+Required python3 tools:
 ```bash
 # Ubuntu/Debian
 sudo apt update && sudo apt install -y python3 python3-pip python3-venv
@@ -16,6 +19,20 @@ sudo dnf install -y python3 python3-pip
 # openSUSE / SLE
 sudo zypper refresh && sudo zypper install -y python3 python3-pip
 ```
+
+Recommended system tools for better scans:
+```bash
+# Ubuntu/Debian
+sudo apt install -y pciutils usbutils util-linux
+
+# CentOS / RHEL / Fedora
+sudo dnf install -y pciutils usbutils util-linux
+
+# openSUSE / SLE
+sudo zypper install -y pciutils usbutils util-linux
+```
+
+#### TopoScope Installation
 
 Create and activate a virtual env:
 ```bash
@@ -29,14 +46,12 @@ Install TopoScope (editable):
 pip install -e .
 ```
 
-Optional system tools (better scans):
+Upgrade TopoScope
 ```bash
-# Ubuntu/Debian
-sudo apt install -y pciutils usbutils util-linux
-# CentOS / RHEL / Fedora
-sudo dnf install -y pciutils usbutils util-linux
-# openSUSE / SLE
-sudo zypper install -y pciutils usbutils util-linux
+git pull --ff-only
+source .venv/bin/activate
+pip install -e .  # optional; needed if deps/metadata changed
+python -c "import toposcope; print(toposcope.__version__)"  # verify version
 ```
 
 ### Usage
