@@ -54,6 +54,12 @@
                                    .map(k => `${k}: ${props[k]}`);
         let lines = [];
         switch (kind) {
+          case 'memory':
+            lines = pick(['total_gb']);
+            break;
+          case 'dimm':
+            lines = pick(['size_gb', 'type', 'speed']);
+            break;
           case 'pci-device':
             lines = pick(['class', 'address', 'vendor_id', 'device_id']);
             break;
@@ -90,6 +96,8 @@
         switch (kind) {
           case 'system': return '#fb8c00';
           case 'cpu': return '#43a047';
+          case 'memory': return '#6d4c41';
+          case 'dimm': return '#8d6e63';
           case 'bus': return '#1e88e5';
           case 'pci-device': return '#5e35b1';
           case 'usb-device': return '#e53935';
