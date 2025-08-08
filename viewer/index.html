@@ -100,8 +100,26 @@
           container: document.getElementById('cy'),
           elements: graphToElements(graph),
           style: [
-            { selector: 'node', style: { 'label': 'data(label)', 'text-wrap': 'wrap', 'text-max-width': 180, 'text-valign': 'top', 'text-halign': 'center', 'color': '#fff', 'font-size': 10, 'background-color': ele => kindColor(ele.data('kind')), 'border-width': 1, 'border-color': '#37474f', 'width': 'label', 'height': 'label', 'padding': '12px', 'shape': 'round-rectangle' }},
-            { selector: 'edge', style: { 'width': 2, 'line-color': '#90a4ae', 'target-arrow-color': '#90a4ae', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 8, 'text-background-opacity': 0.7, 'text-background-color': '#fff', 'text-background-padding': 2 }},
+            { selector: 'node', style: {
+                'label': 'data(label)',
+                'text-wrap': 'wrap',
+                'text-max-width': 240,
+                'text-valign': 'top',
+                'text-halign': 'left',
+                'color': '#263238',
+                'font-size': 12,
+                'background-color': '#ffffff',
+                'background-opacity': 0.98,
+                'border-width': 3,
+                'border-color': ele => kindColor(ele.data('kind')),
+                'width': 'label',
+                'height': 'label',
+                'padding': '14px',
+                'shape': 'round-rectangle',
+                'box-shadow-blur': 6,
+                'box-shadow-color': 'rgba(0,0,0,0.15)'
+            }},
+            { selector: 'edge', style: { 'width': 2, 'line-color': '#b0bec5', 'target-arrow-color': '#b0bec5', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 9, 'text-background-opacity': 0.7, 'text-background-color': '#fff', 'text-background-padding': 2 }},
           ],
           layout: { name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }
         });
