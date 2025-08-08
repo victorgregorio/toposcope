@@ -46,10 +46,37 @@
         return await res.json();
       }
 
+      function summarizeProperties(kind, props) {
+        if (!props) return '';
+        const pick = (keys) => keys.filter(k => props[k] !== undefined && props[k] !== '')
+                                   .map(k => `${k}: ${props[k]}`);
+        let lines = [];
+        switch (kind) {
+          case 'pci-device':
+            lines = pick(['class', 'address', 'vendor_id', 'device_id']);
+            break;
+          case 'usb-device':
+            lines = pick(['bus', 'device', 'vendor_id', 'product_id']);
+            break;
+          case 'cpu':
+            lines = pick(['sockets', 'cores_per_socket', 'threads_per_core']);
+            break;
+          case 'bus':
+            lines = pick(['type']);
+            break;
+          default:
+            lines = Object.entries(props).slice(0, 3).map(([k, v]) => `${k}: ${v}`);
+        }
+        return lines.slice(0, 3).join('\n');
+      }
+
       function graphToElements(graph) {
         const elements = [];
         for (const n of graph.nodes) {
-          elements.push({ data: { id: n.id, label: n.label, kind: n.kind, properties: n.properties || {} } });
+          const props = n.properties || {};
+          const details = summarizeProperties(n.kind, props);
+          const label = details ? `${n.label}\n${details}` : n.label;
+          elements.push({ data: { id: n.id, label, kind: n.kind, properties: props } });
         }
         for (const e of graph.edges) {
           elements.push({ data: { id: e.id, source: e.source, target: e.target, label: e.label || '', kind: e.kind || '' } });
@@ -73,7 +100,7 @@
           container: document.getElementById('cy'),
           elements: graphToElements(graph),
           style: [
-            { selector: 'node', style: { 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'color': '#fff', 'font-size': 10, 'background-color': ele => kindColor(ele.data('kind')), 'width': 'label', 'height': 'label', 'padding': '8px', 'shape': 'round-rectangle' }},
+            { selector: 'node', style: { 'label': 'data(label)', 'text-wrap': 'wrap', 'text-max-width': 180, 'text-valign': 'top', 'text-halign': 'center', 'color': '#fff', 'font-size': 10, 'background-color': ele => kindColor(ele.data('kind')), 'border-width': 1, 'border-color': '#37474f', 'width': 'label', 'height': 'label', 'padding': '12px', 'shape': 'round-rectangle' }},
             { selector: 'edge', style: { 'width': 2, 'line-color': '#90a4ae', 'target-arrow-color': '#90a4ae', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 8, 'text-background-opacity': 0.7, 'text-background-color': '#fff', 'text-background-padding': 2 }},
           ],
           layout: { name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }
@@ -81,13 +108,6 @@
 
         document.getElementById('fit').onclick = () => cy.fit();
         document.getElementById('layout').onclick = () => cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
-
-        cy.on('tap', 'node', (evt) => {
-          const n = evt.target;
-          const props = n.data('properties') || {};
-          const details = Object.entries(props).map(([k,v]) => `${k}: ${v}`).join('\n');
-          if (details) alert(`${n.data('label')}\n\n${details}`); else alert(n.data('label'));
-        });
       });
     </script>
   </body>
