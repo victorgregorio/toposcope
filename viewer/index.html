@@ -61,7 +61,7 @@
             lines = pick(['size_gb', 'type', 'speed']);
             break;
           case 'pci-device':
-            lines = pick(['class', 'address', 'vendor_id', 'device_id']);
+            lines = pick(['class', 'address', 'pcie_speed', 'pcie_width']);
             break;
           case 'usb-device':
             lines = pick(['bus', 'device', 'vendor_id', 'product_id']);

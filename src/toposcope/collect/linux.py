@@ -49,6 +49,76 @@ def _parse_lspci_mm(output: str) -> List[Node]:
     return nodes
 
 
+def _parse_lspci_vmm(output: str) -> List[Dict[str, str]]:
+    """Parse `lspci -Dvmmnnk` into a list of device dicts.
+
+    The vmm format is machine-friendly: stanza blocks separated by blank lines,
+    with key: value entries. Numeric IDs often appear in brackets at the end of
+    names, so we best-effort extract them.
+    """
+    if not output:
+        return []
+    devices: List[Dict[str, str]] = []
+    current: Dict[str, str] = {}
+    for raw in output.splitlines():
+        line = raw.rstrip()
+        if not line:
+            if current.get("Slot"):
+                devices.append(current)
+            current = {}
+            continue
+        m = re.match(r"^([^:]+):\s*(.*)$", line)
+        if not m:
+            continue
+        key, val = m.groups()
+        current[key.strip()] = val.strip()
+    if current.get("Slot"):
+        devices.append(current)
+
+    # post-process vendor/device IDs
+    for dev in devices:
+        vend = dev.get("Vendor", "")
+        devi = dev.get("Device", "")
+        m_v = re.search(r"\[([0-9a-fA-F]{4})\]", vend)
+        m_d = re.search(r"\[([0-9a-fA-F]{4})\]", devi)
+        if m_v and not dev.get("VendorId"):
+            dev["VendorId"] = m_v.group(1).lower()
+        if m_d and not dev.get("DeviceId"):
+            dev["DeviceId"] = m_d.group(1).lower()
+    return devices
+
+
+def _parse_lspci_vv_links(output: str) -> Dict[str, Dict[str, str]]:
+    """Parse `lspci -vv` to extract PCIe link width/speed by slot.
+
+    Returns mapping: { slot: { 'pcie_speed': '8GT/s', 'pcie_width': 'x16' } }
+    """
+    links: Dict[str, Dict[str, str]] = {}
+    if not output:
+        return links
+    slot_re = re.compile(r"^([0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]) ")
+    cur: Optional[str] = None
+    for raw in output.splitlines():
+        line = raw.rstrip()
+        m = slot_re.match(line)
+        if m:
+            cur = m.group(1)
+            continue
+        if cur is None:
+            continue
+        if "LnkSta:" in line:
+            # Example: LnkSta: Speed 8GT/s (ok), Width x16 (ok)
+            sp = re.search(r"Speed\s+([0-9.]+)GT/s", line)
+            wd = re.search(r"Width\s+(x\d+)", line)
+            if cur not in links:
+                links[cur] = {}
+            if sp:
+                links[cur]["pcie_speed"] = f"{sp.group(1)}GT/s"
+            if wd:
+                links[cur]["pcie_width"] = wd.group(1)
+    return links
+
+
 def _parse_lsusb(output: str) -> List[Node]:
     nodes: List[Node] = []
     # lsusb lines like: Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
@@ -242,9 +312,10 @@ def collect_linux_hardware_graph() -> Graph:
         nodes.append(n)
         edges.append({"id": f"e:bus:memory->{n['id']}", "source": "bus:memory", "target": n["id"], "kind": "contains", "label": "dimm"})
 
-    # PCI devices
+    # PCI devices (enriched)
     if _which("lspci"):
-        pci_nodes = _parse_lspci_mm(_run(["lspci", "-mm"]))
+        vmm = _parse_lspci_vmm(_run(["lspci", "-Dvmmnnk"]))
+        vv_links = _parse_lspci_vv_links(_run(["lspci", "-vv"]))
         pci_root: Node = {
             "id": "bus:pci",
             "kind": "bus",
@@ -253,9 +324,32 @@ def collect_linux_hardware_graph() -> Graph:
         }
         nodes.append(pci_root)
         edges.append({"id": f"e:{root['id']}->bus:pci", "source": root["id"], "target": "bus:pci", "kind": "contains", "label": "contains"})
-        for n in pci_nodes:
-            nodes.append(n)
-            edges.append({"id": f"e:bus:pci->{n['id']}", "source": "bus:pci", "target": n["id"], "kind": "contains", "label": "device"})
+        for dev in vmm:
+            slot = dev.get("Slot") or "?"
+            cls = dev.get("Class") or dev.get("ClassName") or ""
+            vendor = dev.get("Vendor", "").split(" [")[0]
+            device = dev.get("Device", "").split(" [")[0]
+            vid = dev.get("VendorId", "")
+            did = dev.get("DeviceId", "")
+            props: Dict[str, str] = {
+                "class": cls,
+                "address": slot,
+            }
+            if vid:
+                props["vendor_id"] = vid
+            if did:
+                props["device_id"] = did
+            link = vv_links.get(slot)
+            if link:
+                props.update(link)
+            node: Node = {
+                "id": f"pci:{slot}",
+                "kind": "pci-device",
+                "label": f"{vendor} {device}".strip() or slot,
+                "properties": props,
+            }
+            nodes.append(node)
+            edges.append({"id": f"e:bus:pci->pci:{slot}", "source": "bus:pci", "target": f"pci:{slot}", "kind": "contains", "label": "device"})
 
     # USB devices
     if _which("lsusb"):
