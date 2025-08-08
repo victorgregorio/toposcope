@@ -3,43 +3,40 @@
 Visual topology mapper for Linux hardware.
 
 ### Installation
-Python 3.9+ and pip are required.
+Python 3.9+ and pip are required. Use a virtual environment (PEP 668 safe):
 
-Optional (for richer scans): `lspci`, `lsusb`, `lscpu`.
+Distro quick setup:
+```bash
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv
 
-Install Python and pip:
-- Ubuntu/Debian:
-  ```bash
-  sudo apt update && sudo apt install -y python3 python3-pip
-  ```
-- CentOS / RHEL / Fedora:
-  ```bash
-  sudo dnf install -y python3 python3-pip
-  # or on older systems: sudo yum install -y python3 python3-pip
-  ```
-- openSUSE / SLE:
-  ```bash
-  sudo zypper refresh && sudo zypper install -y python3 python3-pip
-  ```
+# CentOS / RHEL / Fedora
+sudo dnf install -y python3 python3-pip
 
-Install system tools (optional but recommended):
-- Ubuntu/Debian:
-  ```bash
-  sudo apt update && sudo apt install -y pciutils usbutils util-linux
-  ```
-- CentOS / RHEL / Fedora:
-  ```bash
-  sudo dnf install -y pciutils usbutils util-linux
-  # or on older systems: sudo yum install -y pciutils usbutils util-linux
-  ```
-- openSUSE / SLE:
-  ```bash
-  sudo zypper refresh && sudo zypper install -y pciutils usbutils util-linux
-  ```
+# openSUSE / SLE
+sudo zypper refresh && sudo zypper install -y python3 python3-pip
+```
 
-Install TopoScope (editable dev mode):
+Create and activate a virtual env:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+Install TopoScope (editable):
 ```bash
 pip install -e .
+```
+
+Optional system tools (better scans):
+```bash
+# Ubuntu/Debian
+sudo apt install -y pciutils usbutils util-linux
+# CentOS / RHEL / Fedora
+sudo dnf install -y pciutils usbutils util-linux
+# openSUSE / SLE
+sudo zypper install -y pciutils usbutils util-linux
 ```
 
 ### Usage
