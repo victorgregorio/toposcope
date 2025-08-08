@@ -81,22 +81,34 @@ def serve(
 
         os.chdir(tmp_path)
         handler = http.server.SimpleHTTPRequestHandler
+        # Reusable server to avoid TIME_WAIT issues after Ctrl-C
+        class ReusableTCPServer(socketserver.TCPServer):
+            allow_reuse_address = True
+
         try:
-            with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
-                url = f"http://127.0.0.1:{port}/index.html"
-                print(f"[green]Serving viewer at[/green] {url}")
-                if open_browser:
-                    try:
-                        webbrowser.open_new_tab(url)
-                    except Exception:
-                        pass
-                try:
-                    httpd.serve_forever()
-                except KeyboardInterrupt:
-                    print("\n[cyan]Shutting down viewer server[/cyan]")
+            httpd = ReusableTCPServer(("127.0.0.1", port), handler)
         except OSError as ex:
             print(f"[red]Failed to start server on port {port}: {ex}[/red]")
             raise typer.Exit(code=3)
+
+        try:
+            actual_port = httpd.server_address[1]
+            url = f"http://127.0.0.1:{actual_port}/index.html"
+            print(f"[green]Serving viewer at[/green] {url}")
+            if open_browser:
+                try:
+                    webbrowser.open_new_tab(url)
+                except Exception:
+                    pass
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\n[cyan]Shutting down viewer server[/cyan]")
+        finally:
+            try:
+                httpd.shutdown()
+            except Exception:
+                pass
+            httpd.server_close()
 
 
 if __name__ == "__main__":
