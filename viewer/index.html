@@ -285,7 +285,9 @@
           const now = Date.now();
           const id = evt.target.id();
           if (lastTapId === id && (now - lastTapAt) < dblThresholdMs) {
-            cy.animate({ fit: { eles: evt.target, padding: 50 } }, { duration: 250, easing: 'ease-in-out' });
+            // Fit node + its 1-hop neighborhood for context
+            const focus = evt.target.closedNeighborhood().union(evt.target);
+            cy.animate({ fit: { eles: focus, padding: 120 } }, { duration: 250, easing: 'ease-in-out' });
             lastTapAt = 0; lastTapId = null;
           } else {
             lastTapAt = now;
