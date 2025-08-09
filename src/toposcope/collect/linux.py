@@ -321,6 +321,16 @@ def _parse_lscpu_json(output: str) -> List[Node]:
             sockets = entries.get("Socket(s)", "1")
             cores_per_socket = entries.get("Core(s) per socket", "?")
             threads_per_core = entries.get("Thread(s) per core", "?")
+            vendor_id = entries.get("Vendor ID") or entries.get("Vendor ID:") or entries.get("Vendor")
+            cpu_family = entries.get("CPU family")
+            model = entries.get("Model")
+            stepping = entries.get("Stepping")
+            min_mhz = entries.get("CPU min MHz") or entries.get("CPU min MHz:")
+            max_mhz = entries.get("CPU max MHz") or entries.get("CPU max MHz:")
+            l1d = entries.get("L1d cache")
+            l1i = entries.get("L1i cache")
+            l2 = entries.get("L2 cache")
+            l3 = entries.get("L3 cache")
             node: Node = {
                 "id": "cpu:0",
                 "kind": "cpu",
@@ -329,9 +339,67 @@ def _parse_lscpu_json(output: str) -> List[Node]:
                     "sockets": str(sockets),
                     "cores_per_socket": str(cores_per_socket),
                     "threads_per_core": str(threads_per_core),
+                    **({"vendor_id": str(vendor_id)} if vendor_id else {}),
+                    **({"family": str(cpu_family)} if cpu_family else {}),
+                    **({"model": str(model)} if model else {}),
+                    **({"stepping": str(stepping)} if stepping else {}),
+                    **({"min_mhz": str(min_mhz)} if min_mhz else {}),
+                    **({"max_mhz": str(max_mhz)} if max_mhz else {}),
+                    **({"l1d_cache": str(l1d)} if l1d else {}),
+                    **({"l1i_cache": str(l1i)} if l1i else {}),
+                    **({"l2_cache": str(l2)} if l2 else {}),
+                    **({"l3_cache": str(l3)} if l3 else {}),
                 },
             }
             nodes.append(node)
+    except Exception:
+        pass
+    return nodes
+
+
+def _collect_numa_nodes() -> List[Node]:
+    """Collect NUMA nodes from sysfs; fallback to numactl if needed.
+
+    Returns a list of `numa-node` nodes with properties cpus and mem_total_gb.
+    """
+    nodes: List[Node] = []
+    base = "/sys/devices/system/node"
+    try:
+        import os
+        if os.path.isdir(base):
+            for name in sorted(os.listdir(base)):
+                if not name.startswith("node"):
+                    continue
+                path = os.path.join(base, name)
+                try:
+                    with open(os.path.join(path, "cpulist"), "r", encoding="utf-8") as f:
+                        cpulist = f.read().strip()
+                except Exception:
+                    cpulist = ""
+                mem_total_gb = ""
+                try:
+                    with open(os.path.join(path, "meminfo"), "r", encoding="utf-8") as f:
+                        for line in f:
+                            if line.startswith("Node") and "MemTotal" in line:
+                                parts = line.split()
+                                # ... MemTotal: <value> kB
+                                for i, tok in enumerate(parts):
+                                    if tok == "MemTotal:" and i + 1 < len(parts):
+                                        try:
+                                            kb = float(parts[i + 1])
+                                            mem_total_gb = f"{kb / 1024.0 / 1024.0:.1f}"
+                                        except Exception:
+                                            pass
+                                break
+                except Exception:
+                    pass
+                node: Node = {
+                    "id": f"numa:{name[4:]}",
+                    "kind": "numa-node",
+                    "label": f"NUMA {name[4:]}",
+                    "properties": {"cpus": cpulist, **({"mem_total_gb": mem_total_gb} if mem_total_gb else {})},
+                }
+                nodes.append(node)
     except Exception:
         pass
     return nodes
@@ -445,6 +513,12 @@ def collect_linux_hardware_graph() -> Graph:
         for n in cpu_nodes:
             nodes.append(n)
             edges.append({"id": f"e:{root['id']}->{n['id']}", "source": root["id"], "target": n["id"], "kind": "contains", "label": "contains"})
+        # NUMA nodes linked under CPU if present
+        if cpu_nodes:
+            numa_nodes = _collect_numa_nodes()
+            for nn in numa_nodes:
+                nodes.append(nn)
+                edges.append({"id": f"e:{cpu_nodes[0]['id']}->{nn['id']}", "source": cpu_nodes[0]["id"], "target": nn["id"], "kind": "contains", "label": "numa"})
 
     # Memory summary and DIMMs
     mem_root: Optional[Node] = None
@@ -528,7 +602,7 @@ def collect_linux_hardware_graph() -> Graph:
         if _which("nvidia-smi") and created_pci_nodes:
             out = _run([
                 "nvidia-smi",
-                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw",
+                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw,power.limit,utilization.gpu",
                 "--format=csv,noheader,nounits",
             ])
             if out:
@@ -554,6 +628,8 @@ def collect_linux_hardware_graph() -> Graph:
                     vram_mb = parts[3] if len(parts) > 3 else ""
                     temp_c = parts[4] if len(parts) > 4 else ""
                     power_w = parts[5] if len(parts) > 5 else ""
+                    power_cap = parts[6] if len(parts) > 6 else ""
+                    util_gpu = parts[7] if len(parts) > 7 else ""
                     node["kind"] = "gpu-device"
                     if name:
                         node["label"] = name
@@ -566,6 +642,10 @@ def collect_linux_hardware_graph() -> Graph:
                         p["temperature_c"] = temp_c
                     if power_w:
                         p["power_w"] = power_w
+                    if power_cap:
+                        p["power_cap_w"] = power_cap
+                    if util_gpu:
+                        p["utilization_gpu_pct"] = util_gpu
 
         # AMD ROCm enrichment via rocm-smi JSON
         def _parse_rocm_smi_json(output: str) -> List[Dict[str, str]]:
@@ -641,6 +721,7 @@ def collect_linux_hardware_graph() -> Graph:
                     ""
                 )
                 power_cap = find_key(["max graphics package power", "w"]) or ""
+                util_gpu = find_key(["gpu use", "%"]) or find_key(["average_gfx_activity", "%"]) or ""
                 vram_b = find_key(["vram", "total"]) or find_key(["memory", "total"]) or ""
                 vram_mb: Optional[str] = None
                 if vram_b:
@@ -677,6 +758,7 @@ def collect_linux_hardware_graph() -> Graph:
                     **({"vram_mb": vram_mb} if vram_mb else {}),
                     **({"pcie_width": f"x{pcie_width}"} if pcie_width and not pcie_width.startswith("x") else ({"pcie_width": pcie_width} if pcie_width else {})),
                     **({"pcie_speed": pcie_speed} if pcie_speed else {}),
+                    **({"utilization_gpu_pct": util_gpu} if util_gpu else {}),
                 })
             return devices
 
