@@ -68,6 +68,9 @@
           case 'pci-device':
             lines = pick(['class', 'address', 'pcie_speed', 'pcie_width']);
             break;
+          case 'gpu-device':
+            lines = pick(['driver', 'vram_mb', 'temperature_c', 'power_w', 'pcie_speed', 'pcie_width']);
+            break;
           case 'nvme-device':
             lines = pick(['model', 'size_gb', 'firmware']);
             break;
@@ -114,6 +117,7 @@
           case 'dimm': return '#8d6e63';
           case 'bus': return '#1e88e5';
           case 'pci-device': return '#5e35b1';
+          case 'gpu-device': return '#7b1fa2';
           case 'nvme-device': return '#00897b';
           case 'disk-device': return '#546e7a';
           case 'usb-device': return '#e53935';

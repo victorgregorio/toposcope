@@ -488,6 +488,7 @@ def collect_linux_hardware_graph() -> Graph:
         }
         nodes.append(pci_root)
         edges.append({"id": f"e:{root['id']}->bus:pci", "source": root["id"], "target": "bus:pci", "kind": "contains", "label": "contains"})
+        created_pci_nodes: Dict[str, Node] = {}
         for dev in vmm:
             slot = dev.get("Slot") or "?"
             cls = dev.get("Class") or dev.get("ClassName") or ""
@@ -506,14 +507,144 @@ def collect_linux_hardware_graph() -> Graph:
             link = vv_links.get(slot)
             if link:
                 props.update(link)
+            kind = "pci-device"
+            if any(k in cls.lower() for k in ["vga", "3d controller", "display controller"]):
+                kind = "gpu-device"
             node: Node = {
                 "id": f"pci:{slot}",
-                "kind": "pci-device",
+                "kind": kind,
                 "label": f"{vendor} {device}".strip() or slot,
                 "properties": props,
             }
             nodes.append(node)
             edges.append({"id": f"e:bus:pci->pci:{slot}", "source": "bus:pci", "target": f"pci:{slot}", "kind": "contains", "label": "device"})
+            created_pci_nodes[slot] = node
+
+        # NVIDIA enrichment via nvidia-smi (maps by PCI bus id)
+        if _which("nvidia-smi") and created_pci_nodes:
+            out = _run([
+                "nvidia-smi",
+                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw",
+                "--format=csv,noheader,nounits",
+            ])
+            if out:
+                for line in out.splitlines():
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) < 2:
+                        continue
+                    bus_id = parts[0]
+                    # Expect forms like 00000000:01:00.0 or 0000:65:00.0
+                    m = re.search(r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7])$", bus_id)
+                    if not m:
+                        continue
+                    slot_key = m.group(1)
+                    node = created_pci_nodes.get(slot_key)
+                    if not node:
+                        continue
+                    name = parts[1] if len(parts) > 1 else ""
+                    driver = parts[2] if len(parts) > 2 else ""
+                    vram_mb = parts[3] if len(parts) > 3 else ""
+                    temp_c = parts[4] if len(parts) > 4 else ""
+                    power_w = parts[5] if len(parts) > 5 else ""
+                    node["kind"] = "gpu-device"
+                    if name:
+                        node["label"] = name
+                    p = node.setdefault("properties", {})
+                    if driver:
+                        p["driver"] = driver
+                    if vram_mb:
+                        p["vram_mb"] = vram_mb
+                    if temp_c:
+                        p["temperature_c"] = temp_c
+                    if power_w:
+                        p["power_w"] = power_w
+
+        # AMD ROCm enrichment via rocm-smi JSON
+        def _parse_rocm_smi_json(output: str) -> List[Dict[str, str]]:
+            devices: List[Dict[str, str]] = []
+            if not output:
+                return devices
+            try:
+                data = json.loads(output)
+            except Exception:
+                return devices
+            # rocm-smi -a --json often returns a dict of cards {"card0": {...}, ...}
+            if isinstance(data, dict):
+                items = data.items()
+            elif isinstance(data, list):
+                # some versions might return a list
+                items = [(str(i), v) for i, v in enumerate(data)]
+            else:
+                items = []
+            for _, info in items:
+                if not isinstance(info, dict):
+                    continue
+                # flatten nested dicts into a single-level map of key->value strings
+                flat: Dict[str, str] = {}
+                def walk(prefix: str, obj: Dict[str, object]):
+                    for k, v in obj.items():
+                        key = f"{prefix}{k}" if not prefix else f"{prefix}.{k}"
+                        if isinstance(v, dict):
+                            walk(key, v)
+                        else:
+                            flat[key] = str(v)
+                walk("", info)
+                # heuristic extraction
+                def find_key(substrs: List[str]) -> Optional[str]:
+                    for k, v in flat.items():
+                        lk = k.lower()
+                        if all(s in lk for s in substrs):
+                            return v
+                    return None
+                bdf = find_key(["pci", "bus"]) or find_key(["pcie", "bus"]) or find_key(["bdf"]) or ""
+                name = find_key(["card model"]) or find_key(["product"]) or find_key(["name"]) or ""
+                driver = find_key(["driver version"]) or ""
+                temp_c = find_key(["temperature", "c"]) or ""
+                power_w = find_key(["power", "w"]) or ""
+                vram_b = find_key(["vram", "total"]) or find_key(["memory", "total"]) or ""
+                vram_mb: Optional[str] = None
+                if vram_b:
+                    try:
+                        # value may include units; extract digits
+                        num = re.search(r"([0-9]+)", vram_b)
+                        if num:
+                            val = int(num.group(1))
+                            # Heuristic: if very large, assume bytes; else kB
+                            if val > 1_000_000_000:
+                                vram_mb = str(int(round(val / (1024*1024))))
+                            else:
+                                vram_mb = str(int(round(val / 1024)))
+                    except Exception:
+                        pass
+                devices.append({
+                    "bdf": bdf or "",
+                    "name": name or "",
+                    "driver": driver or "",
+                    "temperature_c": temp_c or "",
+                    "power_w": power_w or "",
+                    **({"vram_mb": vram_mb} if vram_mb else {}),
+                })
+            return devices
+
+        if _which("rocm-smi") and created_pci_nodes:
+            out = _run(["rocm-smi", "-a", "--json"]) or _run(["rocm-smi", "--showall", "--json"])  # try variants
+            for dev in _parse_rocm_smi_json(out):
+                bdf = dev.get("bdf", "")
+                # normalize to slot form 00:00.0 at end of BDF
+                m = re.search(r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7])$", bdf)
+                if not m:
+                    continue
+                slot_key = m.group(1)
+                node = created_pci_nodes.get(slot_key)
+                if not node:
+                    continue
+                node["kind"] = "gpu-device"
+                if dev.get("name"):
+                    node["label"] = dev["name"]
+                p = node.setdefault("properties", {})
+                for k in ("driver", "vram_mb", "temperature_c", "power_w"):
+                    if dev.get(k):
+                        p[k] = dev[k]
 
     # USB devices
     if _which("lsusb"):
