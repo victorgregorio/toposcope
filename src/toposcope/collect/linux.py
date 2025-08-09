@@ -508,7 +508,8 @@ def collect_linux_hardware_graph() -> Graph:
             if link:
                 props.update(link)
             kind = "pci-device"
-            if any(k in cls.lower() for k in ["vga", "3d controller", "display controller"]):
+            cls_l = cls.lower()
+            if any(k in cls_l for k in ["vga", "3d controller", "display controller", "processing accelerators", "accelerator", "co-processor"]):
                 kind = "gpu-device"
             node: Node = {
                 "id": f"pci:{slot}",
@@ -519,6 +520,9 @@ def collect_linux_hardware_graph() -> Graph:
             nodes.append(node)
             edges.append({"id": f"e:bus:pci->pci:{slot}", "source": "bus:pci", "target": f"pci:{slot}", "kind": "contains", "label": "device"})
             created_pci_nodes[slot] = node
+            m_tail = re.search(r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7])$", slot)
+            if m_tail:
+                created_pci_nodes[m_tail.group(1)] = node
 
         # NVIDIA enrichment via nvidia-smi (maps by PCI bus id)
         if _which("nvidia-smi") and created_pci_nodes:
@@ -534,11 +538,15 @@ def collect_linux_hardware_graph() -> Graph:
                         continue
                     bus_id = parts[0]
                     # Expect forms like 00000000:01:00.0 or 0000:65:00.0
-                    m = re.search(r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7])$", bus_id)
-                    if not m:
+                    m_tail = re.search(r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7])$", bus_id)
+                    m_full = re.search(r"([0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7])", bus_id)
+                    node = None
+                    if m_tail:
+                        node = created_pci_nodes.get(m_tail.group(1))
+                    if node is None and m_full:
+                        node = created_pci_nodes.get(m_full.group(1))
+                    if node is None:
                         continue
-                    slot_key = m.group(1)
-                    node = created_pci_nodes.get(slot_key)
                     if not node:
                         continue
                     name = parts[1] if len(parts) > 1 else ""
@@ -627,7 +635,7 @@ def collect_linux_hardware_graph() -> Graph:
             return devices
 
         if _which("rocm-smi") and created_pci_nodes:
-            out = _run(["rocm-smi", "-a", "--json"]) or _run(["rocm-smi", "--showall", "--json"])  # try variants
+            out = _run(["rocm-smi", "--showall", "--json"]) or _run(["rocm-smi", "-a", "--json"])  # try variants
             for dev in _parse_rocm_smi_json(out):
                 bdf = dev.get("bdf", "")
                 # normalize to slot form 00:00.0 at end of BDF
@@ -635,7 +643,7 @@ def collect_linux_hardware_graph() -> Graph:
                 if not m:
                     continue
                 slot_key = m.group(1)
-                node = created_pci_nodes.get(slot_key)
+                node = created_pci_nodes.get(slot_key) or created_pci_nodes.get(bdf)
                 if not node:
                     continue
                 node["kind"] = "gpu-device"
