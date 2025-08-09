@@ -42,6 +42,11 @@ Keep KISS. Default scans stay fast and no-root; deeper details are opt-in.
 ### USB (enhance)
 - Topology from `lsusb -t`; per-port speed and hubs
 
+### CPU (enhance)
+- Enrich from `lscpu -J`: `vendor_id`, `family`, `model`, `stepping`, `min_mhz`, `max_mhz`, cache sizes (L1d/L1i/L2/L3), virtualization
+- Parse `numactl --hardware` or `/sys/devices/system/node/node*` for NUMA nodes (cpulist, memory per node); add NUMA cards linked under CPU
+- Optional (deep): average current MHz and package temp via `/proc/cpuinfo`, `lm-sensors`, or `/sys/class/thermal/*`
+
 ### CLI behavior
 - Default: lightweight scan (no root). Gracefully skip missing tools
 - `--deep`: enable vendor/privileged tools; enforce per-tool timeouts
