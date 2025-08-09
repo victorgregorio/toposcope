@@ -254,7 +254,16 @@
 
         document.getElementById('hierarchy').onclick = () => {
           // Cytoscape 'breadthfirst' hierarchical layout
-          cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], spacingFactor: 0.7, padding: 20 }).run();
+          // Increase spacing and include label sizes to reduce overlap
+          cy.layout({
+            name: 'breadthfirst',
+            directed: true,
+            roots: ['root'],
+            spacingFactor: 1.5,
+            padding: 40,
+            nodeDimensionsIncludeLabels: true,
+            animate: false,
+          }).run();
           cy.one('layoutstop', () => cy.fit());
         };
 
