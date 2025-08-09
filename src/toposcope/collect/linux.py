@@ -119,6 +119,117 @@ def _parse_lspci_vv_links(output: str) -> Dict[str, Dict[str, str]]:
     return links
 
 
+def _parse_nvme_list_json(output: str) -> List[Node]:
+    """Parse `nvme list -o json` into NVMe controller/device nodes.
+
+    We keep this tolerant to schema differences across nvme-cli versions.
+    """
+    nodes: List[Node] = []
+    if not output:
+        return nodes
+    try:
+        data = json.loads(output)
+    except Exception:
+        return nodes
+
+    devices = []
+    if isinstance(data, dict) and "Devices" in data and isinstance(data["Devices"], list):
+        devices = data["Devices"]
+    elif isinstance(data, list):
+        devices = data
+
+    for dev in devices:
+        # Try multiple common keys; fall back gently
+        name = dev.get("Name") or dev.get("DevicePath") or dev.get("Device") or dev.get("SubsystemNQN") or dev.get("Address")
+        model = dev.get("ModelNumber") or dev.get("Model") or dev.get("Model Number") or "NVMe"
+        serial = dev.get("SerialNumber") or dev.get("Serial") or ""
+        firmware = dev.get("Firmware") or dev.get("FirmwareRevision") or ""
+        # Size can be reported under various keys (bytes)
+        size_bytes = None
+        for k in ("PhysicalSize", "Size", "TotalSize", "Capacity"):
+            v = dev.get(k)
+            if isinstance(v, (int, float)) and v > 0:
+                size_bytes = float(v)
+                break
+        size_gb = None
+        if size_bytes:
+            try:
+                size_gb = round(size_bytes / (1024.0 ** 3), 1)
+            except Exception:
+                size_gb = None
+
+        node: Node = {
+            "id": f"nvme:{name}" if name else f"nvme:{len(nodes)}",
+            "kind": "nvme-device",
+            "label": model if model else (name or "NVMe"),
+            "properties": {
+                "model": model,
+                "serial": serial,
+                "firmware": firmware,
+                **({"size_gb": f"{size_gb:.1f}"} if size_gb is not None else {}),
+            },
+        }
+        nodes.append(node)
+
+    return nodes
+
+
+def _parse_lsblk_json(output: str) -> List[Node]:
+    """Parse `lsblk -J -o NAME,TYPE,SIZE,ROTA,TRAN,MODEL,SERIAL` into disk nodes.
+
+    We only emit top-level disks (TYPE == 'disk'); NVMe disks are often also present
+    here but we let NVMe-specific parsing above handle richer details with a
+    different kind to avoid id collisions.
+    """
+    nodes: List[Node] = []
+    if not output:
+        return nodes
+    try:
+        data = json.loads(output)
+    except Exception:
+        return nodes
+    devs = (data or {}).get("blockdevices") or []
+    for d in devs:
+        if (d.get("type") or d.get("type")) != "disk":
+            continue
+        name = d.get("name") or "disk"
+        # Skip NVMe disks (handled by nvme list)
+        if name.startswith("nvme"):
+            continue
+        model = d.get("model") or "Disk"
+        size = d.get("size") or ""
+        serial = d.get("serial") or ""
+        tran = d.get("tran") or ""
+        rota = d.get("rota")
+        # rota may be int/bool; translate to media type when possible
+        media = None
+        try:
+            if rota is not None:
+                media = "hdd" if int(rota) == 1 else "ssd"
+        except Exception:
+            media = None
+
+        props: Dict[str, str] = {"model": model}
+        if size:
+            props["size"] = size
+        if serial:
+            props["serial"] = serial
+        if tran:
+            props["tran"] = tran
+        if media:
+            props["media"] = media
+
+        node: Node = {
+            "id": f"disk:{name}",
+            "kind": "disk-device",
+            "label": f"{model} ({name})",
+            "properties": props,
+        }
+        nodes.append(node)
+
+    return nodes
+
+
 def _parse_lsusb(output: str) -> List[Node]:
     nodes: List[Node] = []
     # lsusb lines like: Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
@@ -365,6 +476,30 @@ def collect_linux_hardware_graph() -> Graph:
         for n in usb_nodes:
             nodes.append(n)
             edges.append({"id": f"e:bus:usb->{n['id']}", "source": "bus:usb", "target": n["id"], "kind": "contains", "label": "device"})
+
+    # Storage: NVMe and generic disks
+    storage_root: Node = {
+        "id": "bus:storage",
+        "kind": "bus",
+        "label": "Storage",
+        "properties": {},
+    }
+    nodes.append(storage_root)
+    edges.append({"id": f"e:{root['id']}->bus:storage", "source": root["id"], "target": "bus:storage", "kind": "contains", "label": "contains"})
+
+    # NVMe via nvme-cli
+    if _which("nvme"):
+        nvme_nodes = _parse_nvme_list_json(_run(["nvme", "list", "-o", "json"]))
+        for n in nvme_nodes:
+            nodes.append(n)
+            edges.append({"id": f"e:bus:storage->{n['id']}", "source": "bus:storage", "target": n["id"], "kind": "contains", "label": "nvme"})
+
+    # Generic disks via lsblk
+    if _which("lsblk"):
+        lsblk_nodes = _parse_lsblk_json(_run(["lsblk", "-J", "-o", "NAME,TYPE,SIZE,ROTA,TRAN,MODEL,SERIAL"]))
+        for n in lsblk_nodes:
+            nodes.append(n)
+            edges.append({"id": f"e:bus:storage->{n['id']}", "source": "bus:storage", "target": n["id"], "kind": "contains", "label": "disk"})
 
     return {"nodes": nodes, "edges": edges}
 

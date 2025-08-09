@@ -63,6 +63,12 @@
           case 'pci-device':
             lines = pick(['class', 'address', 'pcie_speed', 'pcie_width']);
             break;
+          case 'nvme-device':
+            lines = pick(['model', 'size_gb', 'firmware']);
+            break;
+          case 'disk-device':
+            lines = pick(['model', 'size', 'media', 'tran']);
+            break;
           case 'usb-device':
             lines = pick(['bus', 'device', 'vendor_id', 'product_id']);
             break;
@@ -100,6 +106,8 @@
           case 'dimm': return '#8d6e63';
           case 'bus': return '#1e88e5';
           case 'pci-device': return '#5e35b1';
+          case 'nvme-device': return '#00897b';
+          case 'disk-device': return '#546e7a';
           case 'usb-device': return '#e53935';
           default: return '#546e7a';
         }
