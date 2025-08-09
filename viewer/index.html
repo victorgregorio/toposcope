@@ -235,7 +235,10 @@
         cy.on('dragfree position', 'node', debouncedSave);
         cy.on('zoom pan', debouncedSave);
 
-        document.getElementById('fit').onclick = () => { cy.fit(); };
+        document.getElementById('fit').onclick = () => {
+          // Explicitly fit all elements with padding for consistent behavior
+          cy.fit(cy.elements(), 30);
+        };
 
         document.getElementById('compact').onclick = () => {
           // Cytoscape 'cose' force-directed layout
