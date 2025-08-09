@@ -295,7 +295,7 @@
           const id = evt.target.id();
           if (lastTapId === id && (now - lastTapAt) < dblThresholdMs) {
             // Fit just the node with modest padding for context
-            cy.animate({ fit: { eles: evt.target, padding: 70 } }, { duration: 250, easing: 'ease-in-out' });
+            cy.animate({ fit: { eles: evt.target, padding: 50 } }, { duration: 250, easing: 'ease-in-out' });
             lastTapAt = 0; lastTapId = null;
           } else {
             lastTapAt = now;
