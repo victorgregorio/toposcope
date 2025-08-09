@@ -599,16 +599,48 @@ def collect_linux_hardware_graph() -> Graph:
                 walk("", info)
                 # heuristic extraction
                 def find_key(substrs: List[str]) -> Optional[str]:
-                    for k, v in flat.items():
+                    # return the first match scanning keys in sorted order for stability
+                    for k in sorted(flat.keys()):
                         lk = k.lower()
                         if all(s in lk for s in substrs):
-                            return v
+                            return flat[k]
                     return None
-                bdf = find_key(["pci", "bus"]) or find_key(["pcie", "bus"]) or find_key(["bdf"]) or ""
-                name = find_key(["card model"]) or find_key(["product"]) or find_key(["name"]) or ""
+
+                # Identify PCI BDF as precisely as possible
+                bdf = (
+                    find_key(["pci bus"]) or
+                    find_key(["pcie", "bus"]) or
+                    find_key(["bdf"]) or
+                    find_key(["pci", "bus"]) or
+                    ""
+                )
+                # Prefer product/series/name over hex model code
+                name = (
+                    find_key(["device name"]) or
+                    find_key(["card series"]) or
+                    find_key(["product"]) or
+                    find_key(["name"]) or
+                    find_key(["card model"]) or
+                    ""
+                )
                 driver = find_key(["driver version"]) or ""
-                temp_c = find_key(["temperature", "c"]) or ""
-                power_w = find_key(["power", "w"]) or ""
+
+                # Prefer hotspot/core temperature then memory
+                temp_c = (
+                    find_key(["temperature_hotspot", "c"]) or
+                    find_key(["temperature (sensor junction)", "c"]) or
+                    find_key(["temperature (sensor memory)", "c"]) or
+                    find_key(["temperature", "c"]) or
+                    ""
+                )
+                # Prefer current socket power, fallback to generic current power; capture max separately
+                power_current = (
+                    find_key(["current socket graphics package power", "w"]) or
+                    find_key(["current_socket_power", "w"]) or
+                    find_key(["socket graphics package power", "w"]) or
+                    ""
+                )
+                power_cap = find_key(["max graphics package power", "w"]) or ""
                 vram_b = find_key(["vram", "total"]) or find_key(["memory", "total"]) or ""
                 vram_mb: Optional[str] = None
                 if vram_b:
@@ -624,13 +656,27 @@ def collect_linux_hardware_graph() -> Graph:
                                 vram_mb = str(int(round(val / 1024)))
                     except Exception:
                         pass
+                # PCIe link metrics: convert 0.1 GT/s to GT/s
+                pcie_width = find_key(["pcie_link_width", "lanes"]) or ""
+                pcie_speed_raw = find_key(["pcie_link_speed", "gt/s"]) or ""
+                pcie_speed = None
+                if pcie_speed_raw:
+                    m = re.search(r"([0-9]+)", pcie_speed_raw)
+                    if m:
+                        try:
+                            pcie_speed = f"{int(m.group(1))/10:.1f}GT/s"
+                        except Exception:
+                            pcie_speed = None
                 devices.append({
                     "bdf": bdf or "",
                     "name": name or "",
                     "driver": driver or "",
                     "temperature_c": temp_c or "",
-                    "power_w": power_w or "",
+                    "power_w": power_current or "",
+                    **({"power_cap_w": power_cap} if power_cap else {}),
                     **({"vram_mb": vram_mb} if vram_mb else {}),
+                    **({"pcie_width": f"x{pcie_width}"} if pcie_width and not pcie_width.startswith("x") else ({"pcie_width": pcie_width} if pcie_width else {})),
+                    **({"pcie_speed": pcie_speed} if pcie_speed else {}),
                 })
             return devices
 
