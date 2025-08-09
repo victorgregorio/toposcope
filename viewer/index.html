@@ -21,10 +21,11 @@
   <body>
     <div id="toolbar">
       <strong>TopoScope</strong>
-      <button id="fit">Fit</button>
-      <button id="compact">Compact</button>
-      <button id="hierarchy">Hierarchy</button>
-      <button id="portrait">Portrait</button>
+      <!-- Layout controls: Radial => Cytoscape 'concentric'; Compact => 'cose'; Hierarchy => 'breadthfirst'; Fit => cy.fit() -->
+      <button id="radial">Radial</button> <!-- concentric layout -->
+      <button id="compact">Compact</button> <!-- cose layout -->
+      <button id="hierarchy">Hierarchy</button> <!-- breadthfirst layout -->
+      <button id="fit">Fit</button> <!-- fit viewport -->
       <button id="save">Save</button>
       <button id="reset">Reset</button>
       <div id="legend">
@@ -203,6 +204,7 @@
         // Try to restore saved view
         const restored = applySavedView(cy, JSON.parse(localStorage.getItem(storageKey) || 'null'));
         if (!restored) {
+          // Default initial layout = Cytoscape 'concentric' (radial)
           const weight = (n) => {
             const k = n.data('kind');
             if (k === 'system') return 3;
@@ -210,7 +212,7 @@
             return 1;
           };
           cy.layout({
-            name: 'concentric',
+            name: 'concentric', // radial
             concentric: weight,
             levelWidth: () => 1,
             minNodeSpacing: 20,
@@ -236,16 +238,19 @@
         document.getElementById('fit').onclick = () => { cy.fit(); };
 
         document.getElementById('compact').onclick = () => {
+          // Cytoscape 'cose' force-directed layout
           cy.layout({ name: 'cose', animate: false, padding: 30 }).run();
           cy.one('layoutstop', () => cy.fit());
         };
 
         document.getElementById('hierarchy').onclick = () => {
+          // Cytoscape 'breadthfirst' hierarchical layout
           cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], spacingFactor: 0.7, padding: 20 }).run();
           cy.one('layoutstop', () => cy.fit());
         };
 
-        document.getElementById('portrait').onclick = () => {
+        document.getElementById('radial').onclick = () => {
+          // Cytoscape 'concentric' radial layout
           const weight = (n) => {
             const k = n.data('kind');
             if (k === 'system') return 3;
@@ -253,7 +258,7 @@
             return 1;
           };
           cy.layout({
-            name: 'concentric',
+            name: 'concentric', // radial
             concentric: weight,
             levelWidth: () => 1,
             minNodeSpacing: 20,
