@@ -277,6 +277,22 @@
           cy.one('layoutstop', () => cy.fit());
         };
 
+        // Double-click (double-tap) zoom into a node
+        let lastTapAt = 0;
+        let lastTapId = null;
+        const dblThresholdMs = 300;
+        cy.on('tap', 'node', (evt) => {
+          const now = Date.now();
+          const id = evt.target.id();
+          if (lastTapId === id && (now - lastTapAt) < dblThresholdMs) {
+            cy.animate({ fit: { eles: evt.target, padding: 50 } }, { duration: 250, easing: 'ease-in-out' });
+            lastTapAt = 0; lastTapId = null;
+          } else {
+            lastTapAt = now;
+            lastTapId = id;
+          }
+        });
+
         window.addEventListener('resize', () => {
           cy.resize();
           cy.fit();
