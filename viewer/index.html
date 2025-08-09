@@ -11,7 +11,10 @@
       #toolbar { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 10; display: flex; gap: 8px; align-items: center; background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
       #legend { margin-left: auto; display: flex; gap: 12px; align-items: center; }
       .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; color: #222; }
-      .sep { user-select: none; padding: 0 6px; color: #607d8b; opacity: 0.7; font-weight: 600; }
+      /* Pixel-perfect alignment for toolbar items */
+      #toolbar button { height: 28px; padding: 6px 10px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+      #toolbar strong { display: inline-flex; align-items: center; line-height: 1; }
+      .divider { width: 1px; height: 22px; background: #90a4ae; opacity: 0.7; margin: 0 10px; align-self: center; }
       .k-system { background: #ffe0b2; }
       .k-cpu { background: #c8e6c9; }
       .k-bus { background: #bbdefb; }
@@ -26,9 +29,9 @@
       <button id="radial">Radial</button> <!-- concentric layout -->
       <button id="compact">Compact</button> <!-- cose layout -->
       <button id="hierarchy">Hierarchy</button> <!-- breadthfirst layout -->
-      <span class="sep">|</span>
+      <span class="divider"></span>
       <button id="fit">Fit</button> <!-- fit viewport -->
-      <span class="sep">|</span>
+      <span class="divider"></span>
       <button id="save">Save</button>
       <button id="reset">Reset</button>
       <div id="legend">
