@@ -294,11 +294,14 @@
           const now = Date.now();
           const id = evt.target.id();
           if (lastTapId === id && (now - lastTapAt) < dblThresholdMs) {
-            // Tight, consistent zoom-to-node: size node+label to ~90% of viewport
+            // Tight, consistent zoom-to-node: size node+label to ~70% of viewport
             const bb = evt.target.boundingBox({ includeLabels: true });
+            // 60px margin
             const vw = Math.max(1, cy.width() - 60);
             const vh = Math.max(1, cy.height() - 60);
-            let z = Math.min(vw / bb.w, vh / bb.h) * 0.90;
+            // 70% of viewport
+            let z = Math.min(vw / bb.w, vh / bb.h) * 0.70;
+            // Clamp to min/max zoom
             z = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), z));
             cy.animate({ zoom: z, center: { eles: evt.target } }, { duration: 220, easing: 'ease-in-out' });
             lastTapAt = 0; lastTapId = null;
