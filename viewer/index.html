@@ -275,7 +275,22 @@
         document.getElementById('save').onclick = () => saveView();
         document.getElementById('reset').onclick = () => {
           localStorage.removeItem(storageKey);
-          cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
+          // Reset to default radial (concentric) layout
+          const weight = (n) => {
+            const k = n.data('kind');
+            if (k === 'system') return 3;
+            if (k === 'bus' || k === 'memory') return 2;
+            return 1;
+          };
+          cy.layout({
+            name: 'concentric', // radial
+            concentric: weight,
+            levelWidth: () => 1,
+            minNodeSpacing: 20,
+            padding: 30,
+            animate: false,
+          }).run();
+          cy.one('layoutstop', () => cy.fit());
         };
       });
     </script>
