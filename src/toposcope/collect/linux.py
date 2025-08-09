@@ -230,6 +230,59 @@ def _parse_lsblk_json(output: str) -> List[Node]:
     return nodes
 
 
+def _parse_ip_link_brief(output: str) -> List[Dict[str, str]]:
+    """Parse `ip -br link` output into a list of interfaces.
+
+    Returns list of { ifname, state, mac }
+    """
+    ifaces: List[Dict[str, str]] = []
+    if not output:
+        return ifaces
+    # Lines like: "eth0             UP             52:54:00:12:34:56 ..."
+    line_re = re.compile(r"^(\S+)\s+(\S+)\s+([0-9a-fA-F:]{17})")
+    for raw in output.splitlines():
+        line = raw.strip()
+        m = line_re.match(line)
+        if not m:
+            continue
+        ifname_raw, state, mac = m.groups()
+        ifname = ifname_raw.split('@', 1)[0]
+        ifaces.append({"ifname": ifname, "state": state, "mac": mac.lower()})
+    return ifaces
+
+
+def _parse_ethtool_i(output: str) -> Dict[str, str]:
+    """Parse `ethtool -i <ifname>` for driver and bus-info (PCI address)."""
+    info: Dict[str, str] = {}
+    if not output:
+        return info
+    for line in output.splitlines():
+        if line.lower().startswith("driver:"):
+            info["driver"] = line.split(':', 1)[1].strip()
+        elif line.lower().startswith("bus-info:"):
+            info["bus_info"] = line.split(':', 1)[1].strip()
+    return info
+
+
+def _parse_ethtool_speed(output: str) -> Optional[int]:
+    """Parse `ethtool <ifname>` to extract speed in Mbps, if present."""
+    if not output:
+        return None
+    m = re.search(r"Speed:\s*([0-9]+)\s*Mb/s", output)
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
+            return None
+    m = re.search(r"Speed:\s*([0-9]+)\s*Gb/s", output)
+    if m:
+        try:
+            return int(m.group(1)) * 1000
+        except Exception:
+            return None
+    return None
+
+
 def _parse_lsusb(output: str) -> List[Node]:
     nodes: List[Node] = []
     # lsusb lines like: Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
@@ -500,6 +553,31 @@ def collect_linux_hardware_graph() -> Graph:
         for n in lsblk_nodes:
             nodes.append(n)
             edges.append({"id": f"e:bus:storage->{n['id']}", "source": "bus:storage", "target": n["id"], "kind": "contains", "label": "disk"})
+
+    # Network interfaces
+    if _which("ip"):
+        net_root: Node = {"id": "bus:net", "kind": "bus", "label": "Network", "properties": {}}
+        nodes.append(net_root)
+        edges.append({"id": f"e:{root['id']}->bus:net", "source": root["id"], "target": "bus:net", "kind": "contains", "label": "contains"})
+        ifaces = _parse_ip_link_brief(_run(["ip", "-br", "link"]))
+        for iface in ifaces:
+            ifname = iface.get("ifname")
+            props: Dict[str, str] = {k: v for k, v in iface.items() if k != "ifname"}
+            # enrich with ethtool
+            if _which("ethtool") and ifname:
+                info = _parse_ethtool_i(_run(["ethtool", "-i", ifname]))
+                speed = _parse_ethtool_speed(_run(["ethtool", ifname]))
+                props.update(info)
+                if speed:
+                    props["speed_mbps"] = str(speed)
+            node: Node = {
+                "id": f"net:{ifname}",
+                "kind": "net-interface",
+                "label": ifname,
+                "properties": props,
+            }
+            nodes.append(node)
+            edges.append({"id": f"e:bus:net->net:{ifname}", "source": "bus:net", "target": f"net:{ifname}", "kind": "contains", "label": "iface"})
 
     return {"nodes": nodes, "edges": edges}
 

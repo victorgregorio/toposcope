@@ -28,8 +28,13 @@
       <div id="legend">
         <span class="pill k-system">System</span>
         <span class="pill k-cpu">CPU</span>
+        <span class="pill k-bus">Memory</span>
         <span class="pill k-bus">Bus</span>
         <span class="pill k-pci-device">PCI</span>
+        <span class="pill k-bus">Storage</span>
+        <span class="pill" style="background:#00897b">NVMe</span>
+        <span class="pill" style="background:#546e7a">Disk</span>
+        <span class="pill" style="background:#1976d2">Net</span>
         <span class="pill k-usb-device">USB</span>
       </div>
     </div>
@@ -68,6 +73,9 @@
             break;
           case 'disk-device':
             lines = pick(['model', 'size', 'media', 'tran']);
+            break;
+          case 'net-interface':
+            lines = pick(['driver', 'speed_mbps', 'mac', 'bus_info']);
             break;
           case 'usb-device':
             lines = pick(['bus', 'device', 'vendor_id', 'product_id']);
