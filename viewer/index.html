@@ -300,7 +300,7 @@
             const vw = Math.max(1, cy.width() - 60);
             const vh = Math.max(1, cy.height() - 60);
             // 70% of viewport
-            let z = Math.min(vw / bb.w, vh / bb.h) * 0.70;
+            let z = Math.min(vw / bb.w, vh / bb.h) * 0.60;
             // Clamp to min/max zoom
             z = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), z));
             cy.animate({ zoom: z, center: { eles: evt.target } }, { duration: 220, easing: 'ease-in-out' });
@@ -323,7 +323,7 @@
               const bb = target.boundingBox({ includeLabels: true });
               const vw = Math.max(1, cy.width() - 60);
               const vh = Math.max(1, cy.height() - 60);
-              let z = Math.min(vw / bb.w, vh / bb.h) * 0.70; // match node dbl-click zoom factor
+              let z = Math.min(vw / bb.w, vh / bb.h) * 0.60; // match node dbl-click zoom factor
               z = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), z));
               cy.animate({ zoom: z, center: { eles: target } }, { duration: 220, easing: 'ease-in-out' });
             }
