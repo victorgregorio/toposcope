@@ -69,9 +69,15 @@
           case 'memory':
             lines = pick(['total_gb']);
             break;
-          case 'dimm':
-            lines = pick(['size_gb', 'type', 'speed']);
-            break;
+          case 'dimm': {
+            const add = (k, label = k) => { if (props[k]) lines.push(`${label}: ${props[k]}`); };
+            add('manufacturer', 'manufacturer');
+            add('serial', 'serial');
+            add('size_gb', 'size_gb');
+            add('type', 'type');
+            add('speed', 'speed');
+            return lines.slice(0, 4).join('\n');
+          }
           case 'pci-device':
             lines = pick(['class', 'address', 'pcie_speed', 'pcie_width']);
             break;
