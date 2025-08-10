@@ -31,12 +31,13 @@ pip install -e .
 
 #### Upgrade TopoScope
 ```bash
-git pull --ff-only
-pip install -e .  # optional; needed if deps/metadata changed
+git pull --ff-only      # fast forward merge
+pip install -e .        # optional; needed if deps/metadata changed
 python -c "import toposcope; print(toposcope.__version__)"  # verify version
 ```
 
 ### Usage
+
 #### Scan on Linux:
 ```bash
 toposcope scan --out graph.json
@@ -45,17 +46,19 @@ toposcope scan --out graph.json
 #### Serve the viewer locally:
 ```bash
 toposcope serve --graph graph.json --port 8080
+# open: http://127.0.0.1:8080/index.html
 ```
-Open: `http://127.0.0.1:8080/index.html`
+
 
 #### Headless (remote server):
 ```bash
-# on server
-toposcope serve --graph graph.json --port 8080 --no-open-browser
-# on your laptop
+# on your client (e.g., laptop)
 ssh -L 8080:127.0.0.1:8080 user@your-server
+
+# on your server
+toposcope serve --graph graph.json --port 8080 --no-open-browser
+# open locally: http://127.0.0.1:8080/index.html
 ```
-Open locally: `http://127.0.0.1:8080/index.html`
 
 #### Demo mode with dummy data (works anywhere):
 ```bash
