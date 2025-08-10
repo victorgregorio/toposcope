@@ -82,8 +82,8 @@
             lines = pick(['class', 'address', 'pcie_speed', 'pcie_width']);
             break;
           case 'gpu-device':
-            // Include class/address as fallback when vendor tools didn't enrich
-            lines = pick(['class', 'address', 'driver', 'vram_mb', 'temperature_c', 'power_w', 'pcie_speed', 'pcie_width']);
+            // Prefer static details; omit temperature/power (telemetry)
+            lines = pick(['class', 'address', 'driver', 'vram_mb', 'serial', 'pcie_speed', 'pcie_width']);
             break;
           case 'nvme-device':
             lines = pick(['model', 'size_gb', 'firmware']);
