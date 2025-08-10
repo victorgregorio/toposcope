@@ -172,11 +172,20 @@
         const all = getSavedAll(key);
         const saved = all && all[layout];
         if (!saved || !saved.positions) return false;
-        const positions = saved.positions;
-        cy.layout({ name: 'preset', positions: (n) => positions[n.id()] || n.position(), fit: false }).run();
-        if (saved.zoom) cy.zoom(saved.zoom);
-        if (saved.pan) cy.pan(saved.pan);
-        return true;
+        const positions = saved.positions || {};
+        const numPos = Object.keys(positions).length;
+        const numNodes = cy.nodes().length;
+        // Require a minimally complete save (>=50% of nodes) to avoid no-op restores
+        if (numPos < Math.max(1, Math.floor(numNodes * 0.5))) return false;
+        try {
+          cy.layout({ name: 'preset', positions: (n) => positions[n.id()] || n.position(), fit: false }).run();
+          if (saved.zoom) cy.zoom(saved.zoom);
+          if (saved.pan) cy.pan(saved.pan);
+          return true;
+        } catch (e) {
+          console.warn('Failed to apply saved layout', layout, e);
+          return false;
+        }
       }
 
       loadGraph().then(graph => {
@@ -352,7 +361,14 @@
           cy.resize();
           cy.fit();
         });
-        document.getElementById('save').onclick = () => saveView();
+        document.getElementById('save').onclick = () => {
+          saveView();
+          // Visual feedback
+          const btn = document.getElementById('save');
+          const orig = btn.textContent;
+          btn.textContent = 'Saved';
+          setTimeout(() => { btn.textContent = orig; }, 800);
+        };
         document.getElementById('reset').onclick = () => {
           localStorage.removeItem(storageKey);
           currentLayout = 'radial';
