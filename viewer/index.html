@@ -32,7 +32,7 @@
       <span class="divider"></span>
       <button id="fit">Fit</button> <!-- fit viewport -->
       <span class="divider"></span>
-      <button id="save">Save</button>
+      <button id="revert">Revert</button>
       <button id="reset">Reset</button>
       <div id="legend">
         <span class="pill k-system">System</span>
@@ -249,6 +249,20 @@
           setSavedAll(storageKey, all);
         }
 
+        function revertView() {
+          // Discard unsaved changes by reapplying the built-in layout for currentLayout
+          if (currentLayout === 'radial') {
+            const restored = applySavedLayout('radial', storageKey);
+            if (!restored) document.getElementById('radial').click();
+          } else if (currentLayout === 'compact') {
+            const restored = applySavedLayout('compact', storageKey);
+            if (!restored) document.getElementById('compact').click();
+          } else if (currentLayout === 'hierarchy') {
+            const restored = applySavedLayout('hierarchy', storageKey);
+            if (!restored) document.getElementById('hierarchy').click();
+          }
+        }
+
         let saveTimer; const debouncedSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveView, 250); };
         cy.on('dragfree position', 'node', debouncedSave);
         cy.on('zoom pan', debouncedSave);
@@ -359,14 +373,7 @@
           cy.resize();
           cy.fit();
         });
-        document.getElementById('save').onclick = () => {
-          saveView();
-          // Visual feedback
-          const btn = document.getElementById('save');
-          const orig = btn.textContent;
-          btn.textContent = 'Saved';
-          setTimeout(() => { btn.textContent = orig; }, 800);
-        };
+        // Remove explicit Save button in favor of auto-save + Revert control
         document.getElementById('reset').onclick = () => {
           localStorage.removeItem(storageKey);
           currentLayout = 'radial';
