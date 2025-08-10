@@ -92,7 +92,7 @@
             lines = pick(['bus', 'device', 'vendor_id', 'product_id']);
             break;
           case 'cpu':
-            lines = pick(['sockets', 'cores_per_socket', 'threads_per_core']);
+            lines = pick(['sockets', 'cores_per_socket', 'threads_per_core', 'current_mhz', 'min_mhz', 'max_mhz', 'virtualization', 'hypervisor', 'address_sizes']);
             break;
           case 'bus':
             lines = pick(['type']);

@@ -316,7 +316,19 @@ def _parse_lscpu_json(output: str) -> List[Node]:
     try:
         data = json.loads(output)
         if isinstance(data, dict) and "lscpu" in data:
-            entries = {item.get("field", "").strip(': '): item.get("data") for item in data["lscpu"]}
+            # Flatten lscpu JSON, including nested children
+            def walk(items, acc: Dict[str, str]):
+                for item in items or []:
+                    field = str(item.get("field", "")).strip(': ')
+                    value = item.get("data")
+                    if field:
+                        acc[field] = value
+                    children = item.get("children")
+                    if children:
+                        walk(children, acc)
+
+            entries: Dict[str, str] = {}
+            walk(data["lscpu"], entries)
             model_name = entries.get("Model name", "CPU")
             sockets = entries.get("Socket(s)", "1")
             cores_per_socket = entries.get("Core(s) per socket", "?")
@@ -325,12 +337,39 @@ def _parse_lscpu_json(output: str) -> List[Node]:
             cpu_family = entries.get("CPU family")
             model = entries.get("Model")
             stepping = entries.get("Stepping")
-            min_mhz = entries.get("CPU min MHz") or entries.get("CPU min MHz:")
-            max_mhz = entries.get("CPU max MHz") or entries.get("CPU max MHz:")
+            def clean_mhz(v: Optional[str]) -> Optional[str]:
+                if not v:
+                    return None
+                if isinstance(v, str) and v.strip() == "-":
+                    return None
+                return str(v)
+
+            min_mhz = clean_mhz(entries.get("CPU min MHz") or entries.get("CPU min MHz:"))
+            max_mhz = clean_mhz(entries.get("CPU max MHz") or entries.get("CPU max MHz:"))
+            current_mhz = clean_mhz(entries.get("CPU MHz") or entries.get("CPU MHz:"))
             l1d = entries.get("L1d cache")
             l1i = entries.get("L1i cache")
             l2 = entries.get("L2 cache")
             l3 = entries.get("L3 cache")
+            # Totals (sum of all) if available
+            l1d_total = entries.get("L1d")
+            l1i_total = entries.get("L1i")
+            l2_total = entries.get("L2")
+            address_sizes = entries.get("Address sizes")
+            virtualization = entries.get("Virtualization")
+            hypervisor = entries.get("Hypervisor vendor")
+
+            # Fallback current MHz from /proc/cpuinfo if missing
+            if not current_mhz:
+                current_mhz = _parse_cpuinfo_current_mhz(_run(["cat", "/proc/cpuinfo"]))
+            # Fallback min/max via dmidecode if missing
+            if (not min_mhz or not max_mhz) and _which("dmidecode"):
+                dmi_cur, dmi_max = _parse_dmidecode_processor(_run(["dmidecode", "-t", "processor"]))
+                if not min_mhz and dmi_cur:
+                    min_mhz = None  # keep min unknown if not available
+                if not max_mhz and dmi_max:
+                    max_mhz = dmi_max
+
             node: Node = {
                 "id": "cpu:0",
                 "kind": "cpu",
@@ -345,16 +384,51 @@ def _parse_lscpu_json(output: str) -> List[Node]:
                     **({"stepping": str(stepping)} if stepping else {}),
                     **({"min_mhz": str(min_mhz)} if min_mhz else {}),
                     **({"max_mhz": str(max_mhz)} if max_mhz else {}),
+                    **({"current_mhz": str(current_mhz)} if current_mhz else {}),
                     **({"l1d_cache": str(l1d)} if l1d else {}),
                     **({"l1i_cache": str(l1i)} if l1i else {}),
                     **({"l2_cache": str(l2)} if l2 else {}),
                     **({"l3_cache": str(l3)} if l3 else {}),
+                    **({"l1d_total": str(l1d_total)} if l1d_total else {}),
+                    **({"l1i_total": str(l1i_total)} if l1i_total else {}),
+                    **({"l2_total": str(l2_total)} if l2_total else {}),
+                    **({"address_sizes": str(address_sizes)} if address_sizes else {}),
+                    **({"virtualization": str(virtualization)} if virtualization else {}),
+                    **({"hypervisor": str(hypervisor)} if hypervisor else {}),
                 },
             }
             nodes.append(node)
     except Exception:
         pass
     return nodes
+
+
+def _parse_cpuinfo_current_mhz(output: str) -> Optional[str]:
+    if not output:
+        return None
+    m = re.search(r"^cpu MHz\s*:\s*([0-9]+(?:\.[0-9]+)?)", output, re.MULTILINE)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _parse_dmidecode_processor(output: str) -> Tuple[Optional[str], Optional[str]]:
+    """Return (current_mhz, max_mhz) strings if present."""
+    if not output:
+        return (None, None)
+    cur = None
+    mx = None
+    for line in output.splitlines():
+        line = line.strip()
+        m1 = re.match(r"Current Speed:\s*([0-9]+)\s*MHz", line)
+        if m1:
+            cur = m1.group(1)
+        m2 = re.match(r"Max Speed:\s*([0-9]+)\s*MHz", line)
+        if m2:
+            mx = m2.group(1)
+        if cur and mx:
+            break
+    return (cur, mx)
 
 
 def _collect_numa_nodes() -> List[Node]:
