@@ -703,7 +703,7 @@ def collect_linux_hardware_graph() -> Graph:
         if _which("nvidia-smi") and created_pci_nodes:
             out = _run([
                 "nvidia-smi",
-                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw,power.limit,utilization.gpu",
+                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw,power.limit,utilization.gpu,serial,uuid",
                 "--format=csv,noheader,nounits",
             ])
             if out:
@@ -731,6 +731,8 @@ def collect_linux_hardware_graph() -> Graph:
                     power_w = parts[5] if len(parts) > 5 else ""
                     power_cap = parts[6] if len(parts) > 6 else ""
                     util_gpu = parts[7] if len(parts) > 7 else ""
+                    serial = parts[8] if len(parts) > 8 else ""
+                    uuid = parts[9] if len(parts) > 9 else ""
                     node["kind"] = "gpu-device"
                     if name:
                         node["label"] = name
@@ -747,6 +749,10 @@ def collect_linux_hardware_graph() -> Graph:
                         p["power_cap_w"] = power_cap
                     if util_gpu:
                         p["utilization_gpu_pct"] = util_gpu
+                    if serial:
+                        p["serial"] = serial
+                    elif uuid:
+                        p["uuid"] = uuid
 
         # AMD ROCm enrichment via rocm-smi JSON
         def _parse_rocm_smi_json(output: str) -> List[Dict[str, str]]:
@@ -823,6 +829,12 @@ def collect_linux_hardware_graph() -> Graph:
                 )
                 power_cap = find_key(["max graphics package power", "w"]) or ""
                 util_gpu = find_key(["gpu use", "%"]) or find_key(["average_gfx_activity", "%"]) or ""
+                serial = (
+                    find_key(["serial", "number"]) or
+                    find_key(["unique id"]) or
+                    find_key(["guid"]) or
+                    ""
+                )
                 vram_b = find_key(["vram", "total"]) or find_key(["memory", "total"]) or ""
                 vram_mb: Optional[str] = None
                 if vram_b:
@@ -860,6 +872,7 @@ def collect_linux_hardware_graph() -> Graph:
                     **({"pcie_width": f"x{pcie_width}"} if pcie_width and not pcie_width.startswith("x") else ({"pcie_width": pcie_width} if pcie_width else {})),
                     **({"pcie_speed": pcie_speed} if pcie_speed else {}),
                     **({"utilization_gpu_pct": util_gpu} if util_gpu else {}),
+                    **({"serial": serial} if serial else {}),
                 })
             return devices
 
