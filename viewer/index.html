@@ -160,14 +160,20 @@
         return positions;
       }
 
-      function applySavedView(cy, saved) {
+      function getSavedAll() {
+        try { return JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch { return {}; }
+      }
+
+      function setSavedAll(obj) {
+        localStorage.setItem(storageKey, JSON.stringify(obj || {}));
+      }
+
+      function applySavedLayout(layout) {
+        const all = getSavedAll();
+        const saved = all && all[layout];
         if (!saved || !saved.positions) return false;
         const positions = saved.positions;
-        cy.layout({
-          name: 'preset',
-          positions: (n) => positions[n.id()] || n.position(),
-          fit: false
-        }).run();
+        cy.layout({ name: 'preset', positions: (n) => positions[n.id()] || n.position(), fit: false }).run();
         if (saved.zoom) cy.zoom(saved.zoom);
         if (saved.pan) cy.pan(saved.pan);
         return true;
@@ -206,9 +212,10 @@
         });
 
         const storageKey = `toposcope:view:v1:${hashGraph(graph)}`;
+        let currentLayout = 'radial';
 
-        // Try to restore saved view
-        const restored = applySavedView(cy, JSON.parse(localStorage.getItem(storageKey) || 'null'));
+        // Try to restore saved radial layout
+        const restored = applySavedLayout('radial');
         if (!restored) {
           // Default initial layout = Cytoscape 'concentric' (radial)
           const weight = (n) => {
@@ -229,12 +236,10 @@
         }
 
         function saveView() {
-          const payload = {
-            positions: collectPositions(cy),
-            zoom: cy.zoom(),
-            pan: cy.pan(),
-          };
-          localStorage.setItem(storageKey, JSON.stringify(payload));
+          const payload = { positions: collectPositions(cy), zoom: cy.zoom(), pan: cy.pan() };
+          const all = getSavedAll();
+          all[currentLayout] = payload;
+          setSavedAll(all);
         }
 
         let saveTimer; const debouncedSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveView, 250); };
@@ -247,43 +252,52 @@
         };
 
         document.getElementById('compact').onclick = () => {
+          currentLayout = 'compact';
           // Cytoscape 'cose' force-directed layout
-          cy.layout({ name: 'cose', animate: false, padding: 30 }).run();
-          cy.one('layoutstop', () => cy.fit());
+          if (!applySavedLayout('compact')) {
+            cy.layout({ name: 'cose', animate: false, padding: 30 }).run();
+            cy.one('layoutstop', () => cy.fit());
+          }
         };
 
         document.getElementById('hierarchy').onclick = () => {
+          currentLayout = 'hierarchy';
           // Cytoscape 'breadthfirst' hierarchical layout
           // Increase spacing and include label sizes to reduce overlap
-          cy.layout({
-            name: 'breadthfirst',
-            directed: true,
-            roots: ['root'],
-            spacingFactor: 1.5,
-            padding: 40,
-            nodeDimensionsIncludeLabels: true,
-            animate: false,
-          }).run();
-          cy.one('layoutstop', () => cy.fit());
+          if (!applySavedLayout('hierarchy')) {
+            cy.layout({
+              name: 'breadthfirst',
+              directed: true,
+              roots: ['root'],
+              spacingFactor: 1.5,
+              padding: 40,
+              nodeDimensionsIncludeLabels: true,
+              animate: false,
+            }).run();
+            cy.one('layoutstop', () => cy.fit());
+          }
         };
 
         document.getElementById('radial').onclick = () => {
+          currentLayout = 'radial';
           // Cytoscape 'concentric' radial layout
-          const weight = (n) => {
-            const k = n.data('kind');
-            if (k === 'system') return 3;
-            if (k === 'bus' || k === 'memory') return 2;
-            return 1;
-          };
-          cy.layout({
-            name: 'concentric', // radial
-            concentric: weight,
-            levelWidth: () => 1,
-            minNodeSpacing: 20,
-            padding: 30,
-            animate: false,
-          }).run();
-          cy.one('layoutstop', () => cy.fit());
+          if (!applySavedLayout('radial')) {
+            const weight = (n) => {
+              const k = n.data('kind');
+              if (k === 'system') return 3;
+              if (k === 'bus' || k === 'memory') return 2;
+              return 1;
+            };
+            cy.layout({
+              name: 'concentric', // radial
+              concentric: weight,
+              levelWidth: () => 1,
+              minNodeSpacing: 20,
+              padding: 30,
+              animate: false,
+            }).run();
+            cy.one('layoutstop', () => cy.fit());
+          }
         };
 
         // Double-click (double-tap) zoom into a node
@@ -341,6 +355,7 @@
         document.getElementById('save').onclick = () => saveView();
         document.getElementById('reset').onclick = () => {
           localStorage.removeItem(storageKey);
+          currentLayout = 'radial';
           // Reset to default radial (concentric) layout
           const weight = (n) => {
             const k = n.data('kind');
