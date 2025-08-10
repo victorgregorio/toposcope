@@ -3,14 +3,28 @@
 Keep KISS. Default scans stay fast and no-root; deeper details are opt-in.
 
 ### Implemented (current)
-- CPU: `lscpu -J`
-- Memory: total from `/proc/meminfo`; per-DIMM from `dmidecode -t memory` when available
-- PCI: structured from `lspci -Dvmmnnk`; link width/speed from `lspci -vv`
+- CPU
+  - Source: `lscpu -J`, `dmidecode -t processor`
+  - Collected: sockets, cores_per_socket, threads_per_core, vendor/family/model/stepping, min/max MHz (static), base_mhz (dmidecode), cache sizes and totals, address_sizes, virtualization, hypervisor, CPU serial (when exposed)
+- Memory
+  - Source: `/proc/meminfo`, `dmidecode -t memory`
+  - Collected: total_gb, per-DIMM size_gb, type, manufacturer, part_number, serial, speed (configured/reported if available)
+- PCI
+  - Source: `lspci -Dvmmnnk`, `lspci -vv`
+  - Collected: class, address, vendor_id/device_id, PCIe link speed/width
 - USB: `lsusb`
-- Storage: NVMe from `nvme list -o json`; other disks from `lsblk -J`
-- Network: interfaces from `ip -br link`, driver/speed from `ethtool`
-- GPUs: classified via PCI class; NVIDIA via `nvidia-smi`, AMD via `rocm-smi` (when present)
-- Viewer: node “cards” with key details; save/restore view in localStorage
+- Storage
+  - NVMe from `nvme list -o json` (model, serial, firmware, size)
+  - Disks from `lsblk -J` (model, size, serial, transport, media)
+- Network: `ip -br link`, `ethtool` (driver, speed)
+- GPUs
+  - Classify via PCI class; enrich via `nvidia-smi` (driver_version, vbios_version, serial/uuid, vram), `rocm-smi` (driver_version, fw_* firmware versions, vbios_version, serial/unique-id/guid when present)
+  - Note: VMs/VFs often omit serial/firmware; cards will show basic PCI info only
+- Viewer
+  - Card-based nodes with portrait-friendly layouts (Radial/Compact/Hierarchy)
+  - Double-click zoom to node/edge target (60% viewport)
+  - Toolbar grouping and pixel-perfect alignment
+  - Fit and Reset; save/revert removed pending redesign
 
 ### Memory (enhance)
 - Collect: `dmidecode -t memory`, `lsmem`, `numactl --hardware`, `/sys/devices/system/node`
@@ -41,6 +55,10 @@ Keep KISS. Default scans stay fast and no-root; deeper details are opt-in.
 
 ### USB (enhance)
 - Topology from `lsusb -t`; per-port speed and hubs
+
+### Viewer (next)
+- Details panel: a right-side or modal panel that shows all properties for the selected node (full key/value list), including firmware keys like `fw_*`, `vbios_version`, and IDs (serial/uuid). Keeps cards concise while exposing everything.
+- Optional: copy-to-clipboard for fields; search/filter nodes by property
 
 ### CPU (enhance)
 - Enrich from `lscpu -J`: `vendor_id`, `family`, `model`, `stepping`, `min_mhz`, `max_mhz`, cache sizes (L1d/L1i/L2/L3), virtualization
