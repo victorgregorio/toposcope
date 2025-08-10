@@ -81,10 +81,27 @@
           case 'pci-device':
             lines = pick(['class', 'address', 'pcie_speed', 'pcie_width']);
             break;
-          case 'gpu-device':
+          case 'gpu-device': {
             // Prefer static details; omit temperature/power (telemetry)
-            lines = pick(['class', 'address', 'driver', 'vram_mb', 'serial', 'pcie_speed', 'pcie_width']);
-            break;
+            const add = (k, label = k) => { if (props[k]) lines.push(`${label}: ${props[k]}`); };
+            add('driver', 'driver');
+            add('driver_version', 'driver_version');
+            add('vbios_version', 'vbios_version');
+            add('vram_mb', 'vram_mb');
+            add('serial', 'serial');
+            add('uuid', 'uuid');
+            add('pcie_speed', 'pcie_speed');
+            add('pcie_width', 'pcie_width');
+            // Include up to two firmware items like fw_smc, fw_sdma, etc.
+            const fwKeys = Object.keys(props).filter(k => k.startsWith('fw_')).sort();
+            for (const k of fwKeys.slice(0, 2)) {
+              lines.push(`${k}: ${props[k]}`);
+            }
+            // Always include basic PCI fallback at end
+            add('class', 'class');
+            add('address', 'address');
+            return lines.slice(0, 6).join('\n');
+          }
           case 'nvme-device':
             lines = pick(['model', 'size_gb', 'firmware']);
             break;

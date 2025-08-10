@@ -703,7 +703,7 @@ def collect_linux_hardware_graph() -> Graph:
         if _which("nvidia-smi") and created_pci_nodes:
             out = _run([
                 "nvidia-smi",
-                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw,power.limit,utilization.gpu,serial,uuid",
+                "--query-gpu=pci.bus_id,name,driver_version,memory.total,temperature.gpu,power.draw,power.limit,utilization.gpu,serial,uuid,vbios_version",
                 "--format=csv,noheader,nounits",
             ])
             if out:
@@ -733,12 +733,14 @@ def collect_linux_hardware_graph() -> Graph:
                     util_gpu = parts[7] if len(parts) > 7 else ""
                     serial = parts[8] if len(parts) > 8 else ""
                     uuid = parts[9] if len(parts) > 9 else ""
+                    vbios = parts[10] if len(parts) > 10 else ""
                     node["kind"] = "gpu-device"
                     if name:
                         node["label"] = name
                     p = node.setdefault("properties", {})
                     if driver:
                         p["driver"] = driver
+                        p["driver_version"] = driver
                     if vram_mb:
                         p["vram_mb"] = vram_mb
                     if temp_c:
@@ -753,6 +755,8 @@ def collect_linux_hardware_graph() -> Graph:
                         p["serial"] = serial
                     elif uuid:
                         p["uuid"] = uuid
+                    if vbios:
+                        p["vbios_version"] = vbios
 
         # AMD ROCm enrichment via rocm-smi JSON
         def _parse_rocm_smi_json(output: str) -> List[Dict[str, str]]:
@@ -861,6 +865,15 @@ def collect_linux_hardware_graph() -> Graph:
                             pcie_speed = f"{int(m.group(1))/10:.1f}GT/s"
                         except Exception:
                             pcie_speed = None
+                # Gather firmware versions and vbios
+                fw: Dict[str, str] = {}
+                for k, v in flat.items():
+                    lk = k.lower()
+                    if "firmware version" in lk:
+                        mod = lk.replace("firmware version", "").strip().replace(" ", "_").replace(".", "_")
+                        key = f"fw_{mod}" if mod else "fw"
+                        fw[key] = str(v)
+                vbios = find_key(["vbios version"]) or ""
                 devices.append({
                     "bdf": bdf or "",
                     "name": name or "",
@@ -872,6 +885,9 @@ def collect_linux_hardware_graph() -> Graph:
                     **({"pcie_width": f"x{pcie_width}"} if pcie_width and not pcie_width.startswith("x") else ({"pcie_width": pcie_width} if pcie_width else {})),
                     **({"pcie_speed": pcie_speed} if pcie_speed else {}),
                     **({"utilization_gpu_pct": util_gpu} if util_gpu else {}),
+                    **({"driver_version": driver} if driver else {}),
+                    **fw,
+                    **({"vbios_version": vbios} if vbios else {}),
                     **({"serial": serial} if serial else {}),
                 })
             return devices
