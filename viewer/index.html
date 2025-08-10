@@ -160,16 +160,16 @@
         return positions;
       }
 
-      function getSavedAll() {
-        try { return JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch { return {}; }
+      function getSavedAll(key) {
+        try { return JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch { return {}; }
       }
 
-      function setSavedAll(obj) {
-        localStorage.setItem(storageKey, JSON.stringify(obj || {}));
+      function setSavedAll(key, obj) {
+        localStorage.setItem(key, JSON.stringify(obj || {}));
       }
 
-      function applySavedLayout(layout) {
-        const all = getSavedAll();
+      function applySavedLayout(layout, key) {
+        const all = getSavedAll(key);
         const saved = all && all[layout];
         if (!saved || !saved.positions) return false;
         const positions = saved.positions;
@@ -215,7 +215,7 @@
         let currentLayout = 'radial';
 
         // Try to restore saved radial layout
-        const restored = applySavedLayout('radial');
+        const restored = applySavedLayout('radial', storageKey);
         if (!restored) {
           // Default initial layout = Cytoscape 'concentric' (radial)
           const weight = (n) => {
@@ -237,9 +237,9 @@
 
         function saveView() {
           const payload = { positions: collectPositions(cy), zoom: cy.zoom(), pan: cy.pan() };
-          const all = getSavedAll();
+          const all = getSavedAll(storageKey);
           all[currentLayout] = payload;
-          setSavedAll(all);
+          setSavedAll(storageKey, all);
         }
 
         let saveTimer; const debouncedSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveView, 250); };
@@ -254,7 +254,7 @@
         document.getElementById('compact').onclick = () => {
           currentLayout = 'compact';
           // Cytoscape 'cose' force-directed layout
-          if (!applySavedLayout('compact')) {
+          if (!applySavedLayout('compact', storageKey)) {
             cy.layout({ name: 'cose', animate: false, padding: 30 }).run();
             cy.one('layoutstop', () => cy.fit());
           }
@@ -264,7 +264,7 @@
           currentLayout = 'hierarchy';
           // Cytoscape 'breadthfirst' hierarchical layout
           // Increase spacing and include label sizes to reduce overlap
-          if (!applySavedLayout('hierarchy')) {
+          if (!applySavedLayout('hierarchy', storageKey)) {
             cy.layout({
               name: 'breadthfirst',
               directed: true,
@@ -281,7 +281,7 @@
         document.getElementById('radial').onclick = () => {
           currentLayout = 'radial';
           // Cytoscape 'concentric' radial layout
-          if (!applySavedLayout('radial')) {
+          if (!applySavedLayout('radial', storageKey)) {
             const weight = (n) => {
               const k = n.data('kind');
               if (k === 'system') return 3;
