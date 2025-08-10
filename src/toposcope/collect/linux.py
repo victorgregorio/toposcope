@@ -529,7 +529,16 @@ def _parse_dmidecode_memory(output: str) -> List[Node]:
             continue
         locator = dev.get("Locator") or dev.get("Bank Locator") or f"DIMM-{idx}"
         dtype = dev.get("Type", "?")
-        speed = dev.get("Speed", "")
+        # Prefer configured speed; fall back to reported/max
+        speed = (
+            dev.get("Configured Memory Speed")
+            or dev.get("Configured Clock Speed")
+            or dev.get("Speed")
+            or dev.get("Maximum Speed")
+            or ""
+        )
+        if speed and isinstance(speed, str) and speed.strip().lower() in ("unknown", "unconfigured", "n/a"):
+            speed = ""
         # normalize size to GB string
         size_gb: Optional[float] = None
         m_mb = re.search(r"(\d+)\s*MB", size, re.IGNORECASE)
@@ -553,7 +562,7 @@ def _parse_dmidecode_memory(output: str) -> List[Node]:
                 "slot": locator,
                 "size_gb": (f"{size_gb:.1f}" if size_gb is not None else size),
                 "type": dtype,
-                "speed": speed,
+                **({"speed": speed} if speed else {}),
                 "manufacturer": dev.get("Manufacturer", ""),
                 "part_number": dev.get("Part Number", ""),
                 "serial": dev.get("Serial Number", ""),
