@@ -346,7 +346,8 @@ def _parse_lscpu_json(output: str) -> List[Node]:
 
             min_mhz = clean_mhz(entries.get("CPU min MHz") or entries.get("CPU min MHz:"))
             max_mhz = clean_mhz(entries.get("CPU max MHz") or entries.get("CPU max MHz:"))
-            current_mhz = clean_mhz(entries.get("CPU MHz") or entries.get("CPU MHz:"))
+            # Do not capture point-in-time current frequency
+            current_mhz = None
             l1d = entries.get("L1d cache")
             l1i = entries.get("L1i cache")
             l2 = entries.get("L2 cache")
@@ -359,16 +360,11 @@ def _parse_lscpu_json(output: str) -> List[Node]:
             virtualization = entries.get("Virtualization")
             hypervisor = entries.get("Hypervisor vendor")
 
-            # Fallback current MHz from /proc/cpuinfo if missing
-            if not current_mhz:
-                current_mhz = _parse_cpuinfo_current_mhz(_run(["cat", "/proc/cpuinfo"]))
-            # Fallback min/max via dmidecode if missing
-            if (not min_mhz or not max_mhz) and _which("dmidecode"):
+            # Derive base_mhz from dmidecode Max/Current (treat as base, not turbo)
+            base_mhz = None
+            if _which("dmidecode"):
                 dmi_cur, dmi_max = _parse_dmidecode_processor(_run(["dmidecode", "-t", "processor"]))
-                if not min_mhz and dmi_cur:
-                    min_mhz = None  # keep min unknown if not available
-                if not max_mhz and dmi_max:
-                    max_mhz = dmi_max
+                base_mhz = dmi_max or dmi_cur
 
             node: Node = {
                 "id": "cpu:0",
@@ -384,7 +380,7 @@ def _parse_lscpu_json(output: str) -> List[Node]:
                     **({"stepping": str(stepping)} if stepping else {}),
                     **({"min_mhz": str(min_mhz)} if min_mhz else {}),
                     **({"max_mhz": str(max_mhz)} if max_mhz else {}),
-                    **({"current_mhz": str(current_mhz)} if current_mhz else {}),
+                    **({"base_mhz": str(base_mhz)} if base_mhz else {}),
                     **({"l1d_cache": str(l1d)} if l1d else {}),
                     **({"l1i_cache": str(l1i)} if l1i else {}),
                     **({"l2_cache": str(l2)} if l2 else {}),

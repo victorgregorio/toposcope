@@ -93,10 +93,10 @@
             break;
           case 'cpu': {
             const add = (k, label = k) => { if (props[k]) lines.push(`${label}: ${props[k]}`); };
-            // Prioritize speeds first, then topology and virtualization
-            add('current_mhz', 'current_mhz');
+            // Show static speeds only (no point-in-time current freq)
             add('min_mhz', 'min_mhz');
             add('max_mhz', 'max_mhz');
+            add('base_mhz', 'base_mhz');
             add('sockets', 'sockets');
             add('cores_per_socket', 'cores_per_socket');
             add('threads_per_core', 'threads_per_core');
