@@ -363,8 +363,11 @@ def _parse_lscpu_json(output: str) -> List[Node]:
             # Derive base_mhz from dmidecode Max/Current (treat as base, not turbo)
             base_mhz = None
             if _which("dmidecode"):
-                dmi_cur, dmi_max = _parse_dmidecode_processor(_run(["dmidecode", "-t", "processor"]))
+                dmi_out = _run(["dmidecode", "-t", "processor"]) 
+                dmi_cur, dmi_max = _parse_dmidecode_processor(dmi_out)
                 base_mhz = dmi_max or dmi_cur
+                # CPU serial if exposed by BIOS
+                dmi_fields = _parse_dmidecode_processor_fields(dmi_out)
 
             node: Node = {
                 "id": "cpu:0",
@@ -391,6 +394,7 @@ def _parse_lscpu_json(output: str) -> List[Node]:
                     **({"address_sizes": str(address_sizes)} if address_sizes else {}),
                     **({"virtualization": str(virtualization)} if virtualization else {}),
                     **({"hypervisor": str(hypervisor)} if hypervisor else {}),
+                    **({"serial": dmi_fields.get("serial")} if 'dmi_fields' in locals() and dmi_fields.get("serial") else {}),
                 },
             }
             nodes.append(node)
@@ -425,6 +429,24 @@ def _parse_dmidecode_processor(output: str) -> Tuple[Optional[str], Optional[str
         if cur and mx:
             break
     return (cur, mx)
+
+
+def _parse_dmidecode_processor_fields(output: str) -> Dict[str, Optional[str]]:
+    """Extract selected processor fields like Serial Number.
+
+    Returns keys possibly including: serial
+    """
+    result: Dict[str, Optional[str]] = {}
+    if not output:
+        return result
+    for line in output.splitlines():
+        line = line.strip()
+        m = re.match(r"Serial Number:\s*(.*)$", line, re.IGNORECASE)
+        if m:
+            val = m.group(1).strip()
+            if val and val.lower() not in ("not specified", "unknown", "n/a"):
+                result["serial"] = val
+    return result
 
 
 def _collect_numa_nodes() -> List[Node]:
