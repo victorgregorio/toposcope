@@ -11,6 +11,10 @@
       #toolbar { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 10; display: flex; gap: 8px; align-items: center; background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
       #legend { margin-left: auto; display: flex; gap: 12px; align-items: center; }
       .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; color: #222; }
+      /* Pixel-perfect alignment for toolbar items */
+      #toolbar button { height: 28px; padding: 6px 10px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+      #toolbar strong { display: inline-flex; align-items: center; line-height: 1; }
+      .divider { width: 1px; height: 22px; background: #90a4ae; opacity: 0.7; margin: 0 10px; align-self: center; }
       .k-system { background: #ffe0b2; }
       .k-cpu { background: #c8e6c9; }
       .k-bus { background: #bbdefb; }
@@ -21,9 +25,12 @@
   <body>
     <div id="toolbar">
       <strong>TopoScope</strong>
-      <button id="fit">Fit</button>
-      <button id="layout">Layout</button>
-      <button id="save">Save</button>
+      <!-- Layout controls: Radial => Cytoscape 'concentric'; Compact => 'cose'; Hierarchy => 'breadthfirst'; Fit => cy.fit() -->
+      <button id="radial">Radial</button> <!-- concentric layout -->
+      <button id="compact">Compact</button> <!-- cose layout -->
+      <button id="hierarchy">Hierarchy</button> <!-- breadthfirst layout -->
+      <span class="divider"></span>
+      <button id="fit">Fit</button> <!-- fit viewport -->
       <button id="reset">Reset</button>
       <div id="legend">
         <span class="pill k-system">System</span>
@@ -145,24 +152,7 @@
         return fnv1a(JSON.stringify(ids));
       }
 
-      function collectPositions(cy) {
-        const positions = {};
-        cy.nodes().forEach(n => { positions[n.id()] = n.position(); });
-        return positions;
-      }
-
-      function applySavedView(cy, saved) {
-        if (!saved || !saved.positions) return false;
-        const positions = saved.positions;
-        cy.layout({
-          name: 'preset',
-          positions: (n) => positions[n.id()] || n.position(),
-          fit: false
-        }).run();
-        if (saved.zoom) cy.zoom(saved.zoom);
-        if (saved.pan) cy.pan(saved.pan);
-        return true;
-      }
+      // (Save/restore removed for now)
 
       loadGraph().then(graph => {
         const cy = cytoscape({
@@ -193,36 +183,149 @@
             }},
             { selector: 'edge', style: { 'width': 2, 'line-color': '#b0bec5', 'target-arrow-color': '#b0bec5', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 9, 'text-background-opacity': 0.7, 'text-background-color': '#fff', 'text-background-padding': 2 }},
           ],
-          layout: { name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }
+          layout: { name: 'cose', animate: false, padding: 30 }
         });
 
         const storageKey = `toposcope:view:v1:${hashGraph(graph)}`;
 
-        // Try to restore saved view
-        const restored = applySavedView(cy, JSON.parse(localStorage.getItem(storageKey) || 'null'));
-        if (!restored) {
-          cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
-        }
+        // Default initial layout = Cytoscape 'concentric' (radial)
+        const weightInit = (n) => {
+          const k = n.data('kind');
+          if (k === 'system') return 3;
+          if (k === 'bus' || k === 'memory') return 2;
+          return 1;
+        };
+        cy.layout({
+          name: 'concentric', // radial
+          concentric: weightInit,
+          levelWidth: () => 1,
+          minNodeSpacing: 20,
+          padding: 30,
+          animate: false,
+        }).run();
+        cy.fit();
 
-        function saveView() {
-          const payload = {
-            positions: collectPositions(cy),
-            zoom: cy.zoom(),
-            pan: cy.pan(),
+        // (Save/restore removed for now)
+
+        // (Auto-save removed for now)
+
+        document.getElementById('fit').onclick = () => {
+          // Explicitly fit all elements with padding for consistent behavior
+          cy.fit(cy.elements(), 30);
+        };
+
+        document.getElementById('compact').onclick = () => {
+          // Cytoscape 'cose' force-directed layout
+          cy.layout({ name: 'cose', animate: false, padding: 30 }).run();
+          cy.one('layoutstop', () => cy.fit());
+        };
+
+        document.getElementById('hierarchy').onclick = () => {
+          // Cytoscape 'breadthfirst' hierarchical layout
+          // Increase spacing and include label sizes to reduce overlap
+          cy.layout({
+            name: 'breadthfirst',
+            directed: true,
+            roots: ['root'],
+            spacingFactor: 1.5,
+            padding: 40,
+            nodeDimensionsIncludeLabels: true,
+            animate: false,
+          }).run();
+          cy.one('layoutstop', () => cy.fit());
+        };
+
+        document.getElementById('radial').onclick = () => {
+          // Cytoscape 'concentric' radial layout
+          const weight = (n) => {
+            const k = n.data('kind');
+            if (k === 'system') return 3;
+            if (k === 'bus' || k === 'memory') return 2;
+            return 1;
           };
-          localStorage.setItem(storageKey, JSON.stringify(payload));
-        }
+          cy.layout({
+            name: 'concentric', // radial
+            concentric: weight,
+            levelWidth: () => 1,
+            minNodeSpacing: 20,
+            padding: 30,
+            animate: false,
+          }).run();
+          cy.one('layoutstop', () => cy.fit());
+        };
 
-        let saveTimer; const debouncedSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveView, 250); };
-        cy.on('dragfree position', 'node', debouncedSave);
-        cy.on('zoom pan', debouncedSave);
+        // Double-click (double-tap) zoom into a node
+        let lastTapAt = 0;
+        let lastTapId = null;
+        const dblThresholdMs = 300;
+        cy.on('tap', 'node', (evt) => {
+          const now = Date.now();
+          const id = evt.target.id();
+          if (lastTapId === id && (now - lastTapAt) < dblThresholdMs) {
+            // Tight, consistent zoom-to-node: size node+label to ~70% of viewport
+            const bb = evt.target.boundingBox({ includeLabels: true });
+            // 60px margin
+            const vw = Math.max(1, cy.width() - 60);
+            const vh = Math.max(1, cy.height() - 60);
+            // 70% of viewport
+            let z = Math.min(vw / bb.w, vh / bb.h) * 0.60;
+            // Clamp to min/max zoom
+            z = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), z));
+            cy.animate({ zoom: z, center: { eles: evt.target } }, { duration: 220, easing: 'ease-in-out' });
+            lastTapAt = 0; lastTapId = null;
+          } else {
+            lastTapAt = now;
+            lastTapId = id;
+          }
+        });
 
-        document.getElementById('fit').onclick = () => cy.fit();
-        document.getElementById('layout').onclick = () => cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
-        document.getElementById('save').onclick = () => saveView();
+        // Double-click (double-tap) on an edge → zoom to its target node
+        let lastEdgeTapAt = 0;
+        let lastEdgeTapId = null;
+        cy.on('tap', 'edge', (evt) => {
+          const now = Date.now();
+          const id = evt.target.id();
+          if (lastEdgeTapId === id && (now - lastEdgeTapAt) < dblThresholdMs) {
+            const target = evt.target.target() || evt.target.source();
+            if (target) {
+              const bb = target.boundingBox({ includeLabels: true });
+              const vw = Math.max(1, cy.width() - 60);
+              const vh = Math.max(1, cy.height() - 60);
+              let z = Math.min(vw / bb.w, vh / bb.h) * 0.60; // match node dbl-click zoom factor
+              z = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), z));
+              cy.animate({ zoom: z, center: { eles: target } }, { duration: 220, easing: 'ease-in-out' });
+            }
+            lastEdgeTapAt = 0; lastEdgeTapId = null;
+          } else {
+            lastEdgeTapAt = now;
+            lastEdgeTapId = id;
+          }
+        });
+
+        window.addEventListener('resize', () => {
+          cy.resize();
+          cy.fit();
+        });
+        // (Revert removed)
         document.getElementById('reset').onclick = () => {
           localStorage.removeItem(storageKey);
-          cy.layout({ name: 'breadthfirst', directed: true, roots: ['root'], padding: 20 }).run();
+          currentLayout = 'radial';
+          // Reset to default radial (concentric) layout
+          const weight = (n) => {
+            const k = n.data('kind');
+            if (k === 'system') return 3;
+            if (k === 'bus' || k === 'memory') return 2;
+            return 1;
+          };
+          cy.layout({
+            name: 'concentric', // radial
+            concentric: weight,
+            levelWidth: () => 1,
+            minNodeSpacing: 20,
+            padding: 30,
+            animate: false,
+          }).run();
+          cy.one('layoutstop', () => cy.fit());
         };
       });
     </script>
