@@ -174,17 +174,11 @@
         if (!saved || !saved.positions) return false;
         const positions = saved.positions || {};
         const numPos = Object.keys(positions).length;
-        const numNodes = cy.nodes().length;
-        // Require a minimally complete save (>=50% of nodes) to avoid no-op restores
-        if (numPos < Math.max(1, Math.floor(numNodes * 0.5))) return false;
+        if (numPos === 0) return false;
         try {
           cy.layout({ name: 'preset', positions: (n) => positions[n.id()] || n.position(), fit: false }).run();
-          if (typeof saved.zoom === 'number') cy.zoom(saved.zoom);
-          if (saved.pan && typeof saved.pan.x === 'number' && typeof saved.pan.y === 'number') cy.pan(saved.pan);
-          // If no viewport info saved, ensure the restored layout is visible
-          if (!(typeof saved.zoom === 'number' && saved.pan)) {
-            cy.fit(cy.elements(), 30);
-          }
+          // Always fit after restoring positions for a consistent view
+          cy.fit(cy.elements(), 30);
           return true;
         } catch (e) {
           console.warn('Failed to apply saved layout', layout, e);
@@ -249,7 +243,7 @@
         }
 
         function saveView() {
-          const payload = { positions: collectPositions(cy), zoom: cy.zoom(), pan: cy.pan() };
+          const payload = { positions: collectPositions(cy) };
           const all = getSavedAll(storageKey);
           all[currentLayout] = payload;
           setSavedAll(storageKey, all);
