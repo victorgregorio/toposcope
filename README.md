@@ -7,14 +7,14 @@ Python 3.9+ and pip are required. Use a virtual environment (PEP 668 safe). Then
 
 #### Install Python and recommended system tools
 ```bash
+# openSUSE / SLE
+sudo zypper refresh && sudo zypper install -y python3 python3-pip pciutils usbutils util-linux
+
 # Ubuntu/Debian
 sudo apt update && sudo apt install -y python3 python3-pip python3-venv pciutils usbutils util-linux
 
 # CentOS / RHEL / Fedora
 sudo dnf install -y python3 python3-pip pciutils usbutils util-linux
-
-# openSUSE / SLE
-sudo zypper refresh && sudo zypper install -y python3 python3-pip pciutils usbutils util-linux
 ```
 
 #### Create and activate a virtual env
